@@ -1,0 +1,28 @@
+name: elevar_play
+description: Elevar Play — a casual game hub. Games run on the device; the app keeps score.
+publish_to: none
+version: 0.1.0+1
+resolution: workspace
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  design_system:
+    path: ../packages/design_system
+  game_core:
+    path: ../packages/game_core
+  game_pingpong:
+    path: ../packages/game_pingpong
+  pingpong_sim:
+    path: ../packages/pingpong_sim
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true

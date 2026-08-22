@@ -1,0 +1,11 @@
+name: game_core
+description: Deterministic, render-free simulation primitives shared by every Elevar game.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+
+dev_dependencies:
+  test: ^1.25.0

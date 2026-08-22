@@ -1,0 +1,13 @@
+name: elevar_workspace
+publish_to: none
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+
+# Dart pub workspaces: one resolution, one lockfile across every package.
+workspace:
+  - app
+  - packages/design_system
+  - packages/game_core
+  - packages/game_pingpong
+  - packages/pingpong_sim
