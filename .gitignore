@@ -28,3 +28,7 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# Golden-test failure artifacts are generated output, never source.
+# They were committed once by accident; regenerate goldens instead.
+**/test/failures/

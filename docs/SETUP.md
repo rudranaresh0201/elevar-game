@@ -1,69 +1,115 @@
 # Setup & Test
 
-Everything below runs **inside WSL**. You do not need Android Studio, and you do
-not need Flutter on the Windows side. The toolchain is already installed:
+Everything runs on **Windows, natively** — no WSL, no Android Studio.
+
+> A previous revision of this file described a WSL toolchain on a machine whose
+> user was `NIB`. That is no longer how this is built. WSL has no USB
+> passthrough, so it forced Wi-Fi `adb` pairing every session and gave Gradle
+> only whatever RAM the VM was configured with. Native Windows gets a cable, hot
+> reload, and the whole machine.
 
 | | where | version |
 |---|---|---|
-| Flutter | `~/flutter` | 3.47.1 (Dart 3.13.1) |
-| JDK | `~/jdk17` | Temurin 17.0.20 |
-| Android SDK | `~/android-sdk` | platform 36, build-tools 36.0.0, platform-tools 37 |
+| Flutter | `%USERPROFILE%\dev\flutter` | 3.47.1 (Dart 3.13.1) |
+| JDK | `%USERPROFILE%\dev\jdk-17.0.20+8` | Temurin 17.0.20 |
+| Android SDK | `%USERPROFILE%\dev\android-sdk` | platform 36, build-tools 36.0.0, platform-tools |
 
-`~/.bashrc` exports `JAVA_HOME`, `ANDROID_HOME` and puts `flutter`, `adb` and
-`sdkmanager` on the PATH. **Open a new shell** (or `source ~/.bashrc`) before
-your first command.
+---
 
-Verify:
+## 0. Install the toolchain
 
-```bash
+Already done on this machine. To reproduce it elsewhere, from PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\install-toolchain.ps1
+```
+
+It downloads ~2.3 GB, extracts into `%USERPROFILE%\dev`, sets `JAVA_HOME`,
+`ANDROID_HOME` and `PATH` as **user** environment variables, and installs the
+SDK packages. It is idempotent — re-running skips whatever is already in place —
+and logs to `%USERPROFILE%\dev\install.log`.
+
+**Open a new terminal afterwards.** Environment variables the script sets do not
+reach shells that were already running.
+
+```powershell
 flutter doctor
 ```
 
-`[✓] Flutter`, `[✓] Android toolchain` are the two lines that matter. Chrome and
-Linux-desktop show `[✗]` — that is expected and irrelevant; we ship Android.
+`[√] Flutter` and `[√] Android toolchain` are the two lines that matter. Chrome
+and Visual Studio showing `[X]` is expected and irrelevant — we ship Android.
+
+<details>
+<summary>Two traps this script exists to avoid</summary>
+
+**`sdkmanager --licenses` cannot be piped.** It reads from the console, so with
+stdin redirected it accepts nothing, installs nothing, and still exits **0** —
+indistinguishable from success until a build fails much later complaining about
+a missing platform. The script writes the licence hash files directly, which is
+exactly what typing "y" does.
+
+**PowerShell reports `flutter.bat` as failed when it has not.** Flutter writes
+"Building flutter tool…" to stderr, and Windows PowerShell 5.1 turns any native
+command's stderr into an error record and sets the exit code to 1. The command
+succeeded; the shell is misreporting it. Check for the artifact, not the exit
+code.
+
+</details>
 
 ---
 
 ## 1. Test (no phone needed)
 
-```bash
-cd /mnt/c/Users/NIB/Desktop/game-elevar
-flutter pub get          # once, from the repo root — it is a pub workspace
-flutter analyze          # must print "No issues found!"
+```powershell
+cd <repo root>
+flutter pub get     # once, from the ROOT — this is a pub workspace, one lockfile
+flutter analyze     # must print "No issues found!"
 ```
 
-Then the four suites — **68 tests**:
+Then the six suites — **154 tests**:
 
-```bash
-(cd packages/game_core    && dart test)      # 24 — RNG, fixed timestep, sweep, replay codec
-(cd packages/pingpong_sim && dart test)      # 28 — rules, physics, bot balance, replay verify
-(cd packages/game_pingpong && flutter test)  #  7 — widget, multi-touch, goldens
-(cd app                    && flutter test)  #  9 — navigation, points estimate
+```powershell
+cd packages\game_core   ; dart test        # 24  RNG, fixed timestep, sweep, replay codec
+cd ..\pingpong_sim      ; dart test        # 28  pong rules, physics, bot balance, replay verify
+cd ..\racing_sim        ; dart test        # 42  track, car physics, bot ladder, replay verify
+cd ..\game_pingpong     ; flutter test     #  7  widget, multi-touch, goldens
+cd ..\game_racing       ; flutter test     # 14  widget, four-thumb multi-touch, replay verify, goldens
+cd ..\..\app            ; flutter test     # 39  hub, mode select, rewards, layout, points ledger
 ```
 
-The one that matters most is `packages/pingpong_sim/test/simulation_test.dart`:
-it plays a match, records it, replays it, and asserts the score reproduces
-exactly — then confirms a forged score does not survive. **If that goes red, no
-score the server receives can ever be verified.**
+The two that matter most are `pingpong_sim/test/simulation_test.dart` and
+`racing_sim/test/simulation_test.dart`. Each plays a match, records it, replays
+it, and asserts the score reproduces exactly — then confirms a forged score does
+not survive. **If either goes red, no score the server receives can be
+verified.**
 
-### Look at the rendering
+### A note on golden tests
 
-```bash
-(cd packages/game_pingpong && flutter test --update-goldens)
+`packages/game_pingpong/test/golden_test.dart` compares rendered frames against
+committed PNGs. **Goldens are platform-specific**: font rasterisation and
+anti-aliasing differ between Linux and Windows, so images generated under WSL
+did not match on Windows and that suite was red on arrival here. They have been
+regenerated.
+
+If you add CI later, either run it on `windows-latest` or exclude the golden
+test on Linux — one set of images cannot satisfy both.
+
+```powershell
+cd packages\game_pingpong ; flutter test --update-goldens
 ```
 
-Writes real frames to `packages/game_pingpong/test/goldens/*.png`. Open them.
-This is how the stale "GET READY" banner bug was caught — no assertion found it,
-looking at the picture did.
+Writes real frames to `test/goldens/*.png`. Open them — this is how the stale
+"GET READY" banner bug was originally caught: no assertion found it, looking at
+the picture did.
 
-### Tune the bot
+### Tune the bots
 
-```bash
-(cd packages/pingpong_sim && dart run tool/balance.dart)
+```powershell
+cd packages\pingpong_sim ; dart run tool/balance.dart
+cd packages\racing_sim   ; dart run tool/balance.dart    # the difficulty ladder
+cd packages\racing_sim   ; dart run tool/diagnose.dart   # solo pace per difficulty
+cd packages\racing_sim   ; dart run tool/cutcheck.dart   # is cutting a corner profitable?
 ```
-
-Win rates per difficulty against a scripted human, plus rally length and match
-duration. Dials live in `packages/pingpong_sim/lib/src/bot.dart`.
 
 ---
 
@@ -71,80 +117,69 @@ duration. Dials live in `packages/pingpong_sim/lib/src/bot.dart`.
 
 ### Fast path — sideload the APK
 
-```bash
+```powershell
 cd app
 flutter build apk --release
-cp build/app/outputs/flutter-apk/app-release.apk /mnt/c/Users/NIB/Desktop/elevar.apk
 ```
 
-Plug the phone into the PC, set the USB mode to **File transfer**, drag
-`elevar.apk` onto the phone, tap it, allow "install unknown apps".
+The APK lands at `app\build\app\outputs\flutter-apk\app-release.apk`. Copy it to
+the phone over USB or Drive and tap it; Android will ask you to allow installs
+from whichever app you opened it with, the first time only.
 
-Signed with the debug key — fine for your own device, not for the Play Store.
+It is signed with the debug key, which is fine for sideloading and testing. A
+Play Store upload needs a real keystore — a Phase 3 job.
 
-### Better path — wireless debugging, with hot reload
+### Better path — plug the phone in
 
-Worth the five minutes: you get `r` to hot-reload the game while it is running
-on the phone, which is the only sane way to tune game feel.
+Gives you hot reload, which is the only sane way to tune game feel.
 
-On the phone: **Settings → Developer options → Wireless debugging → on**, then
-**Pair device with pairing code**. It shows an IP:port and a 6-digit code.
+1. On the phone: **Settings → About phone → tap "Build number" seven times**.
+2. **Settings → Developer options → USB debugging**, on.
+3. Plug in with a cable that carries data — many charge-only cables do not.
+4. Accept the "Allow USB debugging?" prompt on the phone.
 
-In WSL:
-
-```bash
-adb pair 192.168.x.x:PPPPP        # the pairing port + code from that dialog
-adb connect 192.168.x.x:NNNNN     # the *other* port, on the main Wireless debugging screen
-adb devices                       # should list your phone
-```
-
-The two ports are different — pairing uses a one-shot port, connecting uses the
-persistent one. Phone and PC must be on the same Wi-Fi.
-
-Then:
-
-```bash
+```powershell
+adb devices          # should list your phone as "device", not "unauthorized"
 cd app
-flutter run --release             # or omit --release while iterating
+flutter run
 ```
 
-`r` hot-reloads, `R` restarts, `q` quits.
+Then `r` hot-reloads, `R` restarts, `q` quits.
 
-> Why not USB? WSL2 has no USB passthrough without installing `usbipd-win` and
-> re-attaching the device on every boot. Wireless debugging avoids all of it.
-
----
-
-## 3. What to actually check when you play
-
-Phase 1's exit criterion is *"it feels good in the hand"*, which no test can
-assert. Specifically:
-
-- **Two thumbs at once.** Both paddles must move simultaneously and neither
-  player can grab the other's paddle across the net.
-- **The bot's three levels.** Easy should be beatable while distracted; hard
-  should be genuinely hard. These are calibrated against a *scripted* opponent,
-  not a person — expect to retune.
-- **Ball speed at the top of a long rally.** It accelerates 8.5% per hit up to a
-  ceiling. Is the ceiling too fast to react to on a real screen?
-- **Serve and point-freeze pauses.** 0.7s and 0.8s. Long enough to reset, short
-  enough not to annoy?
+If `adb devices` is empty: try another cable, then another port, then
+`adb kill-server ; adb start-server`.
 
 ---
 
-## Troubleshooting
+## 3. What to actually test
 
-**`flutter: command not found`** — new shell, or `source ~/.bashrc`.
+The unit tests prove the simulations are right. These are the things only a
+person holding a real phone can tell you.
 
-**`Multiple adb binaries found`** — there is an older `~/.local/bin/adb`
-alongside the SDK's. Both are 37.0.0 so it is harmless; delete the stray one if
-the warning bothers you.
+**Car racing, vs bot**
 
-**Gradle hangs on first build** — it downloads ~200MB the first time. Later
-builds are under a minute.
+- Does the car feel like it has weight, or like it is on rails?
+- Is the brake worth using, or can you hold the throttle for a whole lap? If you
+  can, `RaceField.lateralGripLimit` is too generous.
+- Is `medium` a fair fight? `hard` should take about two races in three.
+- Try **auto gas**. It may simply be the better default.
 
-**`adb connect` refused** — wireless debugging turns itself off when the phone
-leaves Wi-Fi or reboots. Re-enable it; you usually need to re-pair too.
+**Car racing, two players, one phone**
 
-**Build fails after editing a package** — the workspace shares one lockfile;
-run `flutter pub get` from the **repo root**, not from `app/`.
+The important one, and the only test that tells you whether it is fun. Sit
+facing each other with the phone flat between you.
+
+- Can you both reach your buttons without elbowing?
+- Does bumping the other car read as satisfying or as unfair?
+- Is the rotated top band actually readable from that side?
+
+**Points**
+
+- Play five races; the payout should visibly shrink from the sixth.
+- Force-quit the app and reopen it — the balance must survive.
+- Open Rewards and check the progress bars moved.
+
+**Both games**
+
+- Play one of each and confirm the hub balance adds up across them. That is the
+  cross-game economy working end to end.

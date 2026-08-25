@@ -77,14 +77,24 @@ class _ChunkyButtonState extends State<ChunkyButton> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               if (widget.icon != null) ...[
-                Icon(widget.icon, color: widget.textColor, size: widget.fontSize),
+                Icon(widget.icon,
+                    color: widget.textColor, size: widget.fontSize),
                 const SizedBox(width: 10),
               ],
-              Text(
-                widget.label,
-                style: ElevarType.display(
-                  widget.fontSize,
-                  color: widget.textColor,
+              // Scaled, not clipped. A long label in a narrow button pushed
+              // 65 pixels past its own edge on a 320pt phone; shrinking the
+              // text keeps the button the size the layout asked for.
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    widget.label,
+                    maxLines: 1,
+                    style: ElevarType.display(
+                      widget.fontSize,
+                      color: widget.textColor,
+                    ),
+                  ),
                 ),
               ),
             ],

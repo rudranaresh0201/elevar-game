@@ -1,6 +1,7 @@
 # Elevar Play — End-to-End Build Plan
 
-**Status:** v1.1 · 2026-08-21 · **Phase 0 and Phase 1 are built** (see `README.md`)
+**Status:** v1.2 · 2026-08-23 · **Phases 0 and 1 built; Phase 4 started — game 2 (car racing) is built**
+See `README.md`, and `docs/RACING.md` for the racing game's own notes.
 **Decisions locked:** Flutter + Flame · Phone SMS OTP (India-first) · Android first · DigitalOcean
 
 ---
@@ -48,7 +49,7 @@ money, **anti-abuse — not throughput — is the hard engineering problem here.
 | Physics | **Hand-rolled, not `flame_forge2d`** | See §5.2 — determinism is required for replay verification. Box2D ports are not reliably deterministic; pong physics is 100 lines |
 | State | `riverpod` 3.x | Async-first, testable, the 2026 default for new Flutter apps |
 | Navigation | `go_router` | Deep links for referrals/vouchers later |
-| Local DB | `drift` (SQLite) | Relational — needed for the offline outbox, local match history, cached leaderboard |
+| Local DB | **`sqflite` + hand-written SQL** (was: `drift`) | Four tables that must mirror the server's Postgres schema exactly. The SQL *is* the specification of that schema, so the Phase 2 port is a transliteration rather than a re-derivation from generated Dart — and it keeps `build_runner` out of the build. Revisit if the local query surface grows past a handful of statements; the swap is mechanical and nothing above `points_repository.dart` would change. |
 | Networking | `dio` + interceptors | Auth refresh, retry, idempotency headers |
 | Secrets | `flutter_secure_storage` | Keystore-backed refresh tokens |
 | Models | `freezed` + `json_serializable` | Immutable, exhaustive unions for game state |
@@ -133,7 +134,7 @@ Add HA Postgres standby (+$15) before public launch. SMS is variable: at ₹0.20
 **Environments:** `local` (docker compose) → `staging` (DO, seeded data, test SMS) →
 `prod`. Infra defined in Terraform (`infra/`) so environments are reproducible.
 
-### 2.4 Local dev environment — important WSL note
+### 2.4 Local dev environment — resolved: Windows native
 
 The repo lives on the Windows filesystem (`C:\Users\NIB\Desktop\game-elevar`), and
 **Flutter Android development should run on Windows natively, not inside WSL2** — WSL
@@ -144,10 +145,21 @@ The **backend** is the opposite: run it in WSL2 (or Docker Desktop) where Node/P
 Redis behave properly. Both halves of the monorepo, one folder, two toolchains. This
 works fine — just don't try to run `flutter build` from WSL.
 
-**Status:** the Flutter SDK is installed in WSL and runs `analyze` and the whole
-test suite there. Still to install *on Windows*, to produce an APK: Android
-Studio, Android SDK 35, JDK 17. Backend side, still to install: Node 22 (the
-machine has 18), Docker, `doctl`.
+**Status — done, and on Windows.** Flutter 3.47.1, Temurin JDK 17 and Android
+SDK platform 36 are installed natively under `%USERPROFILE%\dev`, reproducibly
+via `tools/install-toolchain.ps1`. `flutter analyze` is clean and all 139 tests
+pass. Android Studio turned out not to be needed at all — the command-line tools
+are enough, and skipping it avoids several GB and a GUI licence dance.
+
+The WSL route was abandoned: no USB passthrough (so every session needed Wi-Fi
+`adb` pairing) and only 3 GB of RAM for Gradle. One consequence to know about:
+**golden tests are platform-specific.** The pong goldens were generated under
+WSL and were already failing when this repo was first pushed — the committed
+`test/failures/*.png` artifacts are the evidence. They have been regenerated on
+Windows and the directory is now gitignored. If CI arrives, run it on
+`windows-latest` or exclude goldens on Linux.
+
+Backend side, still to install: Node 22 (the machine has 18), Docker, `doctl`.
 
 ---
 
@@ -214,7 +226,15 @@ all, so importing it is a resolution error rather than a code review note.
 
 ---
 
-## 4. Game plugin contract (built once, reused 4×)
+## 4. Game plugin contract (built once, reused 4×) · ✅ built
+
+**Built with game 2, not game 1 — deliberately.** An interface derived from a
+single implementation is a description of that implementation. Racing is what
+made the seams real. Live in `app/lib/games/`; the shape below is close to what
+shipped, with `buildModeSelect` replacing the `build`/`results` pair because
+each game owns its own setup screen (pong picks a match length, racing picks a
+circuit) and forcing them through one shared screen would put a per-game branch
+back in the hub.
 
 Every game implements one interface, so the hub, scoring, and sync never change when
 you add a game:
@@ -584,10 +604,20 @@ Leaderboards (Redis ZSETs + WS push), daily streaks, profile, match history, pla
 rules + `cheat_flags`, admin panel (Retool or a minimal internal Fastify UI), Sentry,
 push notifications. Play Store internal testing track → closed beta with ~50 real users.
 
-### Phase 4 — Games 2–4 · ~3 weeks
-Each new game only implements `ElevarGame` + a deterministic simulation. Nothing in
-scoring, sync, or the hub changes. Budget ~1 week per game, faster as the shared layer
-matures.
+### Phase 4 — Games 2–4 · 🔨 game 2 built, out of order
+Taken early, ahead of the backend, because it was the cheapest way to find out
+whether the plugin contract was real. It was: adding racing changed nothing in
+scoring, in the result screen, or in the hub. Two things the plan had not
+anticipated, both found by measuring — see `docs/RACING.md` §4 and §5.
+
+Also landed here, because racing needed them:
+- the `ElevarGame` contract and registry (§4)
+- a persistent on-device points ledger with an append-only ledger, per-game
+  stats, daily caps, streaks and a sync outbox (§6.3, §10) — the client half of
+  Phase 2, ready for the server to be pointed at
+- a rewards catalogue screen, so a player can see what they are earning towards
+
+Remaining: games 3 and 4. Budget ~1 week each now the shared layer is proven.
 
 ### Phase 5 — Rewards · ~3 weeks
 Rewards catalogue, redemption flow with hold→confirm→settle ledger states, voucher

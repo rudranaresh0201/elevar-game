@@ -1,8 +1,13 @@
+import 'package:elevar_play/data/points_repository.dart';
 import 'package:elevar_play/main.dart';
 import 'package:elevar_play/scoring/points_estimate.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:game_core/game_core.dart';
+
+import 'package:elevar_play/games/registry.dart';
+
+import 'support/fake_points_repository.dart';
 
 GameResult result({
   required GameMode mode,
@@ -40,12 +45,73 @@ Future<void> pumpApp(WidgetTester tester) async {
 
 void main() {
   group('app shell', () {
+    setUp(() {
+      // The hub reads the ledger on build, and a widget test process has no
+      // platform channels for SQLite to open a database over.
+      pointsRepository = FakePointsRepository(balanceValue: 140, pending: 2);
+    });
+
     testWidgets('opens on the hub with ping pong playable', (tester) async {
       await pumpApp(tester);
 
       expect(find.text('ELEVAR'), findsOneWidget);
       expect(find.text('PING\nPONG'), findsOneWidget);
-      expect(find.text('PENDING SYNC'), findsOneWidget);
+      expect(find.text('CAR\nRACING'), findsOneWidget);
+      // Balance and unsynced count both come off the ledger.
+      expect(find.text('140'), findsOneWidget);
+      expect(find.text('2'), findsOneWidget);
+    });
+
+    testWidgets('every registry game gets a tile', (tester) async {
+      await pumpApp(tester);
+      for (final game in elevarGames) {
+        expect(
+          find.text(game.title),
+          findsOneWidget,
+          reason: '${game.slug} has no tile',
+        );
+      }
+    });
+
+    testWidgets('reaches the racing mode select and can pick a circuit',
+        (tester) async {
+      await pumpApp(tester);
+
+      await tester.tap(find.text('CAR\nRACING'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('CAR RACING'), findsOneWidget);
+      expect(find.text('START RACE'), findsOneWidget);
+
+      await tester.tap(find.text('SUNSET LOOP'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Wider and faster'), findsOneWidget);
+    });
+
+    testWidgets('racing two-player mode hides bot difficulty', (tester) async {
+      await pumpApp(tester);
+      await tester.tap(find.text('CAR\nRACING'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('2 PLAYERS'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('DIFFICULTY'), findsNothing);
+      expect(find.textContaining('Sit facing each other'), findsOneWidget);
+    });
+
+    testWidgets('rewards screen shows the catalogue against the balance',
+        (tester) async {
+      await pumpApp(tester);
+
+      await tester.tap(find.text('SPEND YOUR EP'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('REWARDS'), findsOneWidget);
+      expect(find.text('FREE SHIPPING'), findsOneWidget);
+      // The 300 EP reward, against the fake's 140 EP balance.
+      expect(find.text('160 EP to go'), findsOneWidget);
+      expect(find.text('SOON'), findsWidgets);
     });
 
     testWidgets('reaches mode select and can pick a bot difficulty',

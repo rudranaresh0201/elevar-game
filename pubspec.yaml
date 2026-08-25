@@ -11,3 +11,5 @@ workspace:
   - packages/game_core
   - packages/game_pingpong
   - packages/pingpong_sim
+  - packages/racing_sim
+  - packages/game_racing

@@ -52,61 +52,83 @@ class _ModeSelectScreenState extends State<ModeSelectScreen> {
                     icon: const Icon(Icons.arrow_back_rounded),
                     color: ElevarColors.white,
                   ),
-                  Text('PING PONG', style: ElevarType.display(24)),
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Text('PING PONG', style: ElevarType.display(24)),
+                    ),
+                  ),
                 ],
               ),
-              const SizedBox(height: 28),
-              Text('OPPONENT', style: ElevarType.label(11)),
-              const SizedBox(height: 10),
-              ChunkySegmented<GameMode>(
-                options: const {
-                  GameMode.vsBot: 'VS BOT',
-                  GameMode.local2P: '2 PLAYERS',
-                },
-                selected: _mode,
-                onChanged: (m) => setState(() => _mode = m),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                _mode == GameMode.vsBot
-                    ? 'One phone, one thumb, one machine.'
-                    : 'Two thumbs, one phone. Sit facing each other.',
-                style: ElevarType.body(14, color: ElevarColors.muted),
-              ),
-              if (_mode == GameMode.vsBot) ...[
-                const SizedBox(height: 26),
-                Text('DIFFICULTY', style: ElevarType.label(11)),
-                const SizedBox(height: 10),
-                ChunkySegmented<BotDifficulty>(
-                  options: const {
-                    BotDifficulty.easy: 'EASY',
-                    BotDifficulty.medium: 'MEDIUM',
-                    BotDifficulty.hard: 'HARD',
-                  },
-                  selected: _difficulty,
-                  color: ElevarColors.p1,
-                  onChanged: (d) => setState(() => _difficulty = d),
+              const SizedBox(height: 24),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: <Widget>[
+                      Text('OPPONENT', style: ElevarType.label(11)),
+                      const SizedBox(height: 10),
+                      ChunkySegmented<GameMode>(
+                        options: const {
+                          GameMode.vsBot: 'VS BOT',
+                          GameMode.local2P: '2 PLAYERS',
+                        },
+                        selected: _mode,
+                        onChanged: (m) => setState(() => _mode = m),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        _mode == GameMode.vsBot
+                            ? 'One phone, one thumb, one machine.'
+                            : 'Two thumbs, one phone. Sit facing each other.',
+                        style: ElevarType.body(14, color: ElevarColors.muted),
+                      ),
+                      if (_mode == GameMode.vsBot) ...[
+                        const SizedBox(height: 26),
+                        Text('DIFFICULTY', style: ElevarType.label(11)),
+                        const SizedBox(height: 10),
+                        ChunkySegmented<BotDifficulty>(
+                          options: const {
+                            BotDifficulty.easy: 'EASY',
+                            BotDifficulty.medium: 'MEDIUM',
+                            BotDifficulty.hard: 'HARD',
+                          },
+                          selected: _difficulty,
+                          color: ElevarColors.p1,
+                          onChanged: (d) => setState(() => _difficulty = d),
+                        ),
+                        const SizedBox(height: 10),
+                        Text(
+                          switch (_difficulty) {
+                            BotDifficulty.easy =>
+                              'Slow to react. Misses often.',
+                            BotDifficulty.medium =>
+                              'Reads the bounce. Beatable.',
+                            BotDifficulty.hard =>
+                              'Reads everything. Rarely misses.',
+                          },
+                          style: ElevarType.body(14, color: ElevarColors.muted),
+                        ),
+                      ],
+                      const SizedBox(height: 26),
+                      Text('MATCH LENGTH', style: ElevarType.label(11)),
+                      const SizedBox(height: 10),
+                      ChunkySegmented<bool>(
+                        options: const {
+                          false: 'FIRST TO 11',
+                          true: 'QUICK · 7'
+                        },
+                        selected: _quick,
+                        color: ElevarColors.p2,
+                        onChanged: (q) => setState(() => _quick = q),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  switch (_difficulty) {
-                    BotDifficulty.easy => 'Slow to react. Misses often.',
-                    BotDifficulty.medium => 'Reads the bounce. Beatable.',
-                    BotDifficulty.hard => 'Reads everything. Rarely misses.',
-                  },
-                  style: ElevarType.body(14, color: ElevarColors.muted),
-                ),
-              ],
-              const SizedBox(height: 26),
-              Text('MATCH LENGTH', style: ElevarType.label(11)),
-              const SizedBox(height: 10),
-              ChunkySegmented<bool>(
-                options: const {false: 'FIRST TO 11', true: 'QUICK · 7'},
-                selected: _quick,
-                color: ElevarColors.p2,
-                onChanged: (q) => setState(() => _quick = q),
               ),
-              const Spacer(),
+              const SizedBox(height: 8),
               ChunkyButton(label: 'START MATCH', onPressed: _start),
             ],
           ),
