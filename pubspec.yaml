@@ -13,3 +13,4 @@ workspace:
   - packages/pingpong_sim
   - packages/racing_sim
   - packages/game_racing
+  - packages/cricket_sim
