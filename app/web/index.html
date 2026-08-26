@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <!--
+    Replaced at build time by `flutter build web --base-href`. Leave it alone:
+    serving from a subpath without setting it gives a blank page and no error.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="description" content="Elevar Play — cricket, car racing and ping pong. Play, earn points, spend them on kicks.">
+  <meta name="theme-color" content="#12161C">
+
+  <!-- Shared as a link far more often than it is installed, so the preview
+       card matters more than the manifest does. -->
+  <meta property="og:title" content="Elevar Play">
+  <meta property="og:description" content="Cricket, car racing and ping pong. Play, earn points, spend them on kicks.">
+  <meta property="og:type" content="website">
+
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Elevar Play">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Elevar Play</title>
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    /* The engine takes a couple of seconds to come up on a mid-range phone.
+       Without this, the first thing a shared link shows is a white page — and
+       a white page reads as broken. */
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      overflow: hidden;
+      background: #12161C;
+      overscroll-behavior: none;
+    }
+    #boot {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      background: #12161C;
+      color: #FFFFFF;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      letter-spacing: 0.22em;
+      font-size: 13px;
+      font-weight: 700;
+      transition: opacity 0.35s ease;
+    }
+    #boot.gone { opacity: 0; pointer-events: none; }
+    #boot .bar {
+      width: 132px;
+      height: 10px;
+      border: 3px solid #000;
+      border-radius: 6px;
+      background: #1C2028;
+      overflow: hidden;
+    }
+    #boot .bar span {
+      display: block;
+      height: 100%;
+      width: 40%;
+      background: #E23B2E;
+      animation: slide 1.1s ease-in-out infinite;
+    }
+    @keyframes slide {
+      0%   { transform: translateX(-110%); }
+      100% { transform: translateX(260%); }
+    }
+  </style>
+</head>
+<body>
+  <div id="boot">
+    <div>ELEVAR PLAY</div>
+    <div class="bar"><span></span></div>
+  </div>
+
+  <script>
+    // Flutter fires this once the first frame is actually on screen.
+    window.addEventListener('flutter-first-frame', function () {
+      var boot = document.getElementById('boot');
+      if (!boot) return;
+      boot.classList.add('gone');
+      setTimeout(function () { boot.remove(); }, 400);
+    });
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

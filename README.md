@@ -13,6 +13,8 @@ that does not exist yet.
   things that had to be measured rather than reasoned about
 - [`docs/CRICKET.md`](docs/CRICKET.md) — the cricket build, and the five things
   that came out backwards until they were measured
+- [`docs/DEPLOY.md`](docs/DEPLOY.md) — getting a playable link out: the web
+  build, the droplet, and what the browser cannot do
 
 ---
 
@@ -80,6 +82,18 @@ cd app
 flutter build apk --release    # sideload the APK, or…
 flutter run                    # …with a phone plugged in over USB
 ```
+
+It also builds for the **web**, which is how anybody gets a link they can just
+tap. The points ledger runs the same SQL against `sqlite3.wasm` in the browser,
+so a balance survives a refresh:
+
+```bash
+cd app
+flutter build web --release
+.\..\deploy\deploy-web.ps1 -DropletHost root@<ip> -IncludeApk
+```
+
+See [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 `flutter run` gives you hot reload, which is the only sane way to tune game
 feel. [`docs/SETUP.md`](docs/SETUP.md) has the full walkthrough, including
