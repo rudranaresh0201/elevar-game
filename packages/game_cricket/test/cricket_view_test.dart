@@ -82,18 +82,64 @@ void main() {
       expect(find.text('BATTING'), findsOneWidget);
     });
 
-    testWidgets('the ground is letterboxed clear of the control band',
+    testWidgets('the view is from behind the stumps, not above them',
         (tester) async {
       final harness = CricketHarness(tester);
       await harness.pump(botConfig);
       await harness.frames(2);
 
-      // The whole point of reserving the band first: no part of the ground can
-      // sit under a thumb.
+      final camera = harness.game.pitchCamera;
+
+      // The whole point of reserving the band first: the scene is built into
+      // the space above it, so no part of the ground sits under a thumb.
       expect(harness.game.bandHeight, greaterThan(150));
-      final bottom = harness.game.fieldOrigin.dy +
-          CricketField.height * harness.game.fieldScale;
-      expect(bottom, lessThanOrEqualTo(844 - harness.game.bandHeight + 0.5));
+      expect(camera.screenHeight,
+          closeTo(844 - harness.game.bandHeight, 0.5));
+
+      // Perspective, not orthographic: the same width of pitch has to cover
+      // more screen at the batter's end than at the bowler's. This is the
+      // assertion that would have caught the original top-down view, which
+      // shipped looking like a radar display.
+      final nearWidth = (camera.project(
+                  CricketField.pitchCentreX + CricketField.pitchHalfWidth,
+                  CricketField.strikerCreaseY) -
+              camera.project(
+                  CricketField.pitchCentreX - CricketField.pitchHalfWidth,
+                  CricketField.strikerCreaseY))
+          .distance;
+      final farWidth = (camera.project(
+                  CricketField.pitchCentreX + CricketField.pitchHalfWidth,
+                  CricketField.bowlerCreaseY) -
+              camera.project(
+                  CricketField.pitchCentreX - CricketField.pitchHalfWidth,
+                  CricketField.bowlerCreaseY))
+          .distance;
+      expect(nearWidth, greaterThan(farWidth * 1.8),
+          reason: 'the pitch is not receding — this is a top-down view');
+
+      // And the batter is on screen at a size somebody can actually see.
+      final batter = camera.project(
+          CricketField.pitchCentreX, CricketField.strikerY);
+      expect(batter.dy, lessThan(camera.screenHeight));
+      expect(batter.dy, greaterThan(camera.horizon));
+      expect(178 * camera.scaleAt(CricketField.strikerY), greaterThan(80),
+          reason: 'the batter is smaller than a thumbnail');
+    });
+
+    testWidgets('the camera swaps ends when the player starts bowling',
+        (tester) async {
+      final harness = CricketHarness(tester);
+      await harness.pump(botConfig);
+      await harness.frames(2);
+      expect(harness.game.pitchCamera.facing, -1);
+
+      // Watching from behind the batter you are bowling *to* would send every
+      // delivery away from the camera.
+      expect(
+        PitchCamera.forScreen(width: 390, height: 650, role: Role.bowling)
+            .facing,
+        1,
+      );
     });
 
     testWidgets('the bowler eventually bowls', (tester) async {

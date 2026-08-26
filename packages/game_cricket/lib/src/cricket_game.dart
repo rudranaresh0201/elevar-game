@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:game_core/game_core.dart';
 
+import 'camera.dart';
 import 'cricket_scene.dart';
 import 'game_config.dart';
 
@@ -77,8 +78,20 @@ class CricketGame extends FlameGame {
   /// on top of the part of the ground the player is trying to watch.
   double bandHeight = 190;
 
-  double fieldScale = 1;
-  Offset fieldOrigin = Offset.zero;
+  /// The view from behind the stumps.
+  ///
+  /// Rebuilt on resize and whenever the player swaps ends, because batting and
+  /// bowling are watched from opposite ends of the pitch. See [PitchCamera] for
+  /// why this exists at all — the short version is that the simulation's own
+  /// top-down layout is correct and unplayable to look at.
+  PitchCamera pitchCamera = PitchCamera.unset;
+
+  /// The last size handed to [onGameResize], so the camera can be rebuilt when
+  /// the role changes without waiting for another resize.
+  Vector2 _lastSize = Vector2(390, 844);
+
+  /// Which role the camera was last built for.
+  Role _cameraRole = Role.batting;
 
   /// Fraction of a tick already elapsed, for interpolating between simulation
   /// steps. Without it the ball visibly steps at 120 Hz against a 60 Hz display
@@ -145,30 +158,19 @@ class CricketGame extends FlameGame {
     // phone and capped so it does not eat a tablet.
     bandHeight = clampD(size.y * 0.24, 168, 300);
 
-    final usableHeight = size.y - bandHeight;
+    _lastSize = size.clone();
+    _rebuildCamera();
+  }
 
-    // Fit the **ground**, not the whole simulation field.
-    //
-    // The field is 1000 x 1500 but the rope only encloses the middle of it, so
-    // letterboxing the field left roughly a third of the screen as empty grass
-    // above and below the oval — the game looked like it was being viewed from
-    // too far away. Fitting the ground's bounding box instead fills the space
-    // with the part anybody is actually looking at.
-    const groundWidth = CricketField.groundRadiusX * 2;
-    const groundHeight = CricketField.groundRadiusY * 2;
-    const margin = 14.0;
-
-    final scale = math.min(
-      (size.x - margin * 2) / groundWidth,
-      (usableHeight - margin * 2) / groundHeight,
-    );
-    fieldScale = scale;
-
-    // Place the origin so the ground's centre lands in the middle of the space
-    // left over above the band.
-    fieldOrigin = Offset(
-      size.x / 2 - CricketField.groundCentreX * scale,
-      usableHeight / 2 - CricketField.groundCentreY * scale,
+  /// Builds the camera for the current screen and the current role.
+  void _rebuildCamera() {
+    _cameraRole = role;
+    pitchCamera = PitchCamera.forScreen(
+      width: _lastSize.x,
+      // The band is subtracted first, so no part of the ground can end up
+      // under a thumb — the same rule racing follows.
+      height: _lastSize.y - bandHeight,
+      role: _cameraRole,
     );
   }
 
@@ -191,6 +193,10 @@ class CricketGame extends FlameGame {
       runner.tick();
       _reactTo(simulation.pendingEvents);
     });
+
+    // Batting and bowling are watched from opposite ends, so the camera swaps
+    // with the innings.
+    if (role != _cameraRole) _rebuildCamera();
 
     if (simulation.state.phase != before) hudRevision.value++;
     // The timing ring and the run-up both animate every frame.

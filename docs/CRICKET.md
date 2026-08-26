@@ -7,7 +7,7 @@ a Flame renderer that can only look, and one line in the registry.
 - `packages/game_cricket/` — the ground, the pads, the sparks.
 - `app/lib/screens/cricket_*.dart` — mode select and the host screen.
 
-If you only read one section, read §4. Five separate things in this game came
+If you only read one section, read §5. Five separate things in this game came
 out **backwards** and every one of them was found by running numbers, not by
 reading code.
 
@@ -42,10 +42,58 @@ what makes the bowling half a game rather than a cooldown.
 
 ---
 
-## 2. Geometry
+## 2. The camera, and why the first version was dead
 
-The simulation runs in the same 1000 × 1500 space the other games use, and the
-renderer letterboxes it. Nothing here is in pixels.
+The simulation stores a flat 1000 × 1500 field seen from directly above, and
+the first renderer drew exactly that. Every number was right and the result was
+unplayable to look at: the batter was a six-pixel dot, the bowler was another
+dot, the ball never grew as it arrived, and the whole thing read as a radar
+display. The first person to open it said so in about four seconds.
+
+`PitchCamera` fixed it without the simulation changing at all. It is a pinhole
+projection sitting between the state and the canvas:
+
+```
+  d       = how far in front of the eye a point is
+  screenX = centreX + lateral * focal / d
+  screenY = horizon + (lift - height * rise) / d
+```
+
+Everything worth having falls out of those two lines. The pitch becomes a
+trapezoid, wide at your feet and narrow at the far end. The mown stripes bunch
+towards the horizon. Fielders in the deep are small. And the one that actually
+matters for playing it: **the ball more than doubles in size coming down the
+pitch**, which turns timing from a guess into something you can see arriving.
+
+Three things about it are not obvious:
+
+**The eye sits 154 units behind the striker, and that number is load-bearing.**
+Anything nearer than `minDepth` is culled, so 154 puts the keeper (y 1012),
+slip (1000) and fine leg (1180) *behind the camera*. An earlier version stood
+further back and the first thing on screen was the wicketkeeper's back filling
+a third of it.
+
+**There are two cameras.** Batting looks one way down the pitch; bowling looks
+the other. Watching from behind the batter you are bowling *to* would send your
+own delivery away from you. It is one sign flip, and `role` changing at the
+innings break rebuilds the camera.
+
+**The vertical is stretched.** An honest camera would set `rise == focal`, but
+an honest camera that also fits the ground onto a phone has to sit almost on
+the deck, and from there you cannot read length at all. Every cricket game
+cheats this. 1.6× is where a six looks like a six and still lands in frame.
+
+A small top-down map stays in the corner. The perspective view hides the one
+thing a batter needs in order to *aim* — where the gaps are — and without it
+the swipe direction is a shrug rather than a decision.
+
+---
+
+## 3. Geometry
+
+The simulation runs in the same 1000 × 1500 space the other games use, flat and
+seen from above. Nothing here is in pixels, and nothing here knows the camera in
+§2 exists.
 
 ```
 CricketField.groundCentreX  500      groundRadiusX  468
@@ -72,7 +120,7 @@ matters without the answer always being "square".
 
 ---
 
-## 3. One gesture per ball
+## 4. One gesture per ball
 
 Batting is **drag and release**. The direction of the drag is where the ball
 goes, its length is how hard, and the moment of release is the timing. A plain
@@ -101,40 +149,40 @@ PNG showed in a second.
 
 ---
 
-## 4. Five things that came out backwards
+## 5. Five things that came out backwards
 
 Each of these passed a plausible reading of the code and was only caught by
 printing a table.
 
-**4.1 — Runs were counted from elapsed time.** A well-struck ball reaches a
+**5.1 — Runs were counted from elapsed time.** A well-struck ball reaches a
 fielder *sooner*, so it scored **fewer** runs than a mishit. Every difficulty
 ladder was therefore inverted. Runs now come from the distance the ball is
 stopped at (`unitsPerRun = 200`), which is both correct and the thing a player
 already expects.
 
-**4.2 — Almost nothing could earn a run.** `tool/_probe.dart` measured the
+**5.2 — Almost nothing could earn a run.** `tool/_probe.dart` measured the
 median live ball at 87 ticks against a 168-tick threshold: **1%** of balls
-scored. Fixed by 4.1, plus slower fielders.
+scored. Fixed by 5.1, plus slower fielders.
 
-**4.3 — A late swing was impossible.** Contact resolved on exactly
+**5.3 — A late swing was impossible.** Contact resolved on exactly
 `idealContactTick`, so a swing one tick later hit nothing. The ball's position,
 velocity and height are now frozen at the moment of the swing and resolved at
 `ideal + contactWindowTicks` — which is what makes early and late *different*
 rather than one being "no shot at all".
 
-**4.4 — Catches ate the game.** 4.8 to 5.3 wickets out of 6. Catching is now
+**5.4 — Catches ate the game.** 4.8 to 5.3 wickets out of 6. Catching is now
 gated on the ball descending, scaled by how fast it is travelling, and the
 fielder pursues the *predicted landing point* (positive root of the quadratic)
 rather than the ball's current position. Reach and radius both came down.
 
-**4.5 — The measuring instrument was broken.** `tool/diagnose.dart` passed no
+**5.5 — The measuring instrument was broken.** `tool/diagnose.dart` passed no
 bowler input, so the bot faced an identical delivery every single ball. Half the
 table was measuring nothing at all. Worth stating plainly: **check the
 instrument before you believe the reading.**
 
 ---
 
-## 5. The ladder
+## 6. The ladder
 
 `dart run tool/diagnose.dart`, 60 matches per cell, scripted human proxy:
 
@@ -161,7 +209,7 @@ As with ping pong and racing, these come from a scripted proxy, not people.
 
 ---
 
-## 6. The replay bug worth remembering
+## 7. The replay bug worth remembering
 
 The recorder samples input every 4 ticks. A swing is a **one-tick edge**. So a
 match that scored 12 live replayed as 4 — the recording simply never saw most of
@@ -185,11 +233,11 @@ just the recording — in both value and time.**
 
 ---
 
-## 7. Tests
+## 8. Tests
 
 ```bash
 cd packages/cricket_sim  && dart test      # 26
-cd packages/game_cricket && flutter test   # 13  (10 widget + 3 golden)
+cd packages/game_cricket && flutter test   # 15  (11 widget + 4 golden)
 ```
 
 The one that matters most is in `cricket_view_test.dart`: it plays a whole match
@@ -197,13 +245,19 @@ through the real widget with real taps on the real pads, then re-runs the replay
 it produced and asserts both innings come back to the same score. If that is
 green, the path from thumb to server-verifiable score is intact.
 
-The goldens are there to be *looked at*. They caught two things nothing else
-did: the ground filling only half the screen, and the timing bar sitting on the
-batter.
+The goldens are there to be *looked at*, and they have earned their keep four
+times over: the ground filling half the screen, the timing bar sitting on the
+batter, three quarters of the boundary rope missing because the ellipse sweep
+started inside the visible arc, and a spark burst rendering as one fifty-pixel
+disc on the pitch. Not one of those failed an assertion.
+
+There is a golden for the **bowling** innings specifically. Half the match is
+played from that camera, and a view that is only wrong in the second innings is
+a view nobody finds until a player does.
 
 ---
 
-## 8. Not done
+## 9. Not done
 
 - **Sound.** There is a seam in `CricketGame._reactTo` and no assets.
 - **Two-player.** Cricket is asymmetric, so pass-the-phone would mean handing

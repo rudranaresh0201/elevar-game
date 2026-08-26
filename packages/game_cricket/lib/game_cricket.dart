@@ -14,8 +14,14 @@
 /// * **The timing ring exists because timing is invisible.** A player who
 ///   mistimes three balls and cannot tell whether they were early or late has
 ///   been given nothing to improve on.
+/// * **The view is from behind the stumps, not above them.** The simulation
+///   stores a flat top-down field and the first version drew it that way. It
+///   was correct and it was dead — a six-pixel batter, a ball that never grew
+///   as it arrived. [PitchCamera] projects the same state into a front-on
+///   view, and it is the reason the game is worth looking at.
 library;
 
+export 'src/camera.dart';
 export 'src/controls.dart';
 export 'src/cricket_game.dart';
 export 'src/cricket_scene.dart';

@@ -113,11 +113,11 @@ cd packages/cricket_sim  && dart test    # 26
 # widget and golden tests
 cd packages/game_pingpong && flutter test  #  7
 cd packages/game_racing   && flutter test  # 17
-cd packages/game_cricket  && flutter test  # 13
+cd packages/game_cricket  && flutter test  # 15
 cd app                    && flutter test  # 42
 ```
 
-201 tests, all green.
+203 tests, all green.
 
 ### What the tests are actually for
 
@@ -151,6 +151,9 @@ cd app                    && flutter test  # 42
   both directions and every innings terminates.
 - **`packages/game_cricket/test/cricket_view_test.dart`** — a whole match played
   through the real pads with real taps, then replayed and checked to the run.
+  Also asserts the view is a perspective one: the pitch has to be wider at the
+  batter's end than the bowler's, which is what the original top-down render
+  failed.
 - **`app/test/layout_test.dart`** — every screen built at 320, 390 and 430pt. A
   Flutter overflow is a `FlutterError` during layout, so building it is the
   assertion.

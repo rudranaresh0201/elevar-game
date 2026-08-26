@@ -66,7 +66,7 @@ flutter pub get     # once, from the ROOT — this is a pub workspace, one lockf
 flutter analyze     # must print "No issues found!"
 ```
 
-Then the eight suites — **201 tests**:
+Then the eight suites — **203 tests**:
 
 ```powershell
 cd packages\game_core   ; dart test        # 24  RNG, fixed timestep, sweep, replay codec
@@ -75,7 +75,7 @@ cd ..\racing_sim        ; dart test        # 44  track, car physics, bot ladder,
 cd ..\cricket_sim       ; dart test        # 26  innings, fielding, scoring, bot ladder, replay verify
 cd ..\game_pingpong     ; flutter test     #  7  widget, multi-touch, goldens
 cd ..\game_racing       ; flutter test     # 17  widget, four-thumb multi-touch, replay verify, goldens
-cd ..\game_cricket      ; flutter test     # 13  widget, batting and bowling pads, replay verify, goldens
+cd ..\game_cricket      ; flutter test     # 15  widget, batting and bowling pads, both cameras, replay verify, goldens
 cd ..\..\app            ; flutter test     # 42  hub, mode select, rewards, layout, points ledger
 ```
 
