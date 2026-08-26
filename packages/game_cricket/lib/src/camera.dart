@@ -96,6 +96,29 @@ class PitchCamera {
   /// Nothing closer than this is drawn: at the eye itself the divide explodes.
   static const double minDepth = 120;
 
+  /// How tall a player is drawn, in field units.
+  ///
+  /// Nothing like life size — a real person is about twelve units against a
+  /// 468-unit ground radius, and at twelve units nobody is visible at all. But
+  /// the first version used 178, which is a twenty-six-metre human, and the
+  /// result was a screen full of enormous people with a cricket ground
+  /// somewhere behind them.
+  static const double personHeight = 120;
+
+  /// Whether somebody standing here is in front of the camera at all.
+  ///
+  /// Depth culling alone is not enough. Standing behind the striker, the
+  /// keeper and slip are only a little nearer than the batter, so they survive
+  /// [minDepth] and then fill the bottom of the screen with their backs. They
+  /// are behind the player's own shoulder in real life and they belong off
+  /// screen.
+  bool showsSomeoneAt(double fieldY) {
+    if (!isVisible(fieldY)) return false;
+    return facing == -1
+        ? fieldY <= CricketField.strikerCreaseY
+        : fieldY >= CricketField.bowlerCreaseY;
+  }
+
   /// Builds the camera for a screen, with the near and far ends of the ground
   /// pinned where they look right.
   ///
@@ -117,18 +140,18 @@ class PitchCamera {
     // out of the picture. An earlier version stood further back and the first
     // thing on screen was the wicketkeeper's back, filling a third of it.
     final eyeY = bowling
-        ? CricketField.bowlerCreaseY - 230
-        : CricketField.strikerY + 154;
+        ? CricketField.bowlerCreaseY - 300
+        : CricketField.strikerY + 230;
     final facing = bowling ? 1 : -1;
 
     // The depth of the player whose end this is: the anchor for everything.
-    final nearDepth = bowling ? 230.0 : 154.0;
+    final nearDepth = bowling ? 300.0 : 230.0;
     final farDepth = bowling
         ? (CricketField.groundCentreY + CricketField.groundRadiusY) - eyeY
         : eyeY - (CricketField.groundCentreY - CricketField.groundRadiusY);
 
-    const horizonFraction = 0.17;
-    const nearFraction = 0.87;
+    const horizonFraction = 0.22;
+    const nearFraction = 0.84;
 
     final horizon = height * horizonFraction;
     // screenY(nearDepth) == height * nearFraction

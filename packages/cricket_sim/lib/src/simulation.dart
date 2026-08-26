@@ -402,9 +402,20 @@ class CricketSimulation {
     // Playing with the line. Where the ball crossed the bat decides which shot
     // was the right one, so a wide ball wants to be cut and a straight one
     // wants to be driven.
+    //
+    // The right shot is expressed as a **direction**, in the same normalised
+    // space the played shot is in. It used to be a bare ratio capped at one,
+    // compared against the x of a unit vector which can never exceed 0.707 for
+    // anything played down the ground — so a wide ball could not be aligned
+    // with no matter how well it was read, and a straight one aligned almost
+    // for free. Accurate bowling was therefore *punished*: against the hard
+    // bot, a bowler at skill 0.9 conceded 34 off twelve balls and a bowler at
+    // skill 0.3 conceded 22. The whole difficulty ladder inverted on this one
+    // line.
     final contactAt = ball.contactPosition ?? ball.position;
     final lineOffset = contactAt.x - CricketField.pitchCentreX;
-    final preferred = clampD(lineOffset / 70, -1, 1);
+    final preferred =
+        Vec2(clampD(lineOffset / 70, -1, 1), -1).normalized.x;
     final alignment =
         1.0 - clampD((direction.x - preferred).abs() / 1.6, 0, 1);
 
@@ -584,35 +595,73 @@ class CricketSimulation {
     return ball.position + ball.velocity * t;
   }
 
-  /// Every fielder runs at the ball. The first one to reach it ends the ball.
+  /// The nearest fielder chases. The rest hold their ground.
+  ///
+  /// This used to be *every* fielder running at the landing point, and it is
+  /// the single reason the game had no boundaries in it. Ten players
+  /// converging on one spot means somebody is always underneath it, so every
+  /// lofted shot was a catch and hitting the ball harder only chose which
+  /// fielder took it. The balance table showed it plainly — four and a half
+  /// wickets an innings out of six, and a boundary once in eight balls.
+  ///
+  /// One chaser is also simply what a real field does. Everybody else still
+  /// stops what comes to them: standing still is not the same as being a hole
+  /// in the field, and a shot hit straight at cover is still a shot hit
+  /// straight at cover.
   void _chaseBall(double dt) {
     final ball = state.ball;
     final target = _landingPoint(ball);
 
+    Fielder? chaser;
+    var nearest = double.infinity;
+    for (final fielder in state.fielding) {
+      final distance = (target - fielder.position).length;
+      if (distance < nearest) {
+        nearest = distance;
+        chaser = fielder;
+      }
+    }
+
     for (final fielder in state.fielding) {
       fielder.previousPosition = fielder.position;
 
-      final toBall = target - fielder.position;
-      final distance = toBall.length;
-
-      if (distance > 1) {
-        final step = CricketField.fielderSpeed * dt;
-        fielder.position += toBall.normalized *
-            (step > distance ? distance : step);
+      if (identical(fielder, chaser)) {
+        final toBall = target - fielder.position;
+        final distance = toBall.length;
+        if (distance > 1) {
+          final step = CricketField.fielderSpeed * dt;
+          fielder.position +=
+              toBall.normalized * (step > distance ? distance : step);
+        }
+      } else {
+        // A half-hearted amble towards the ball, capped so nobody drifts into
+        // becoming a second chaser. Purely so the field does not look frozen.
+        final toBall = ball.position - fielder.position;
+        final distance = toBall.length;
+        if (distance > CricketField.backingUpRadius) {
+          final step = CricketField.fielderSpeed * CricketField.backingUpPace * dt;
+          fielder.position += toBall.normalized * step;
+        }
       }
 
-      final reach = ball.position - fielder.position;
-      final gap = reach.length;
+      final gap = (ball.position - fielder.position).length;
 
-      // A catch. Three conditions, and each one exists to stop a different
+      // A catch. Four conditions now, and each one exists to stop a different
       // way of making every lofted shot out:
       //
       //  * low enough to get a hand to, so a real hit sails over the top;
       //  * **on the way down**, or a fielder standing where the ball happens
       //    to pass on its way up takes a catch nobody would call a catch;
-      //  * and travelling slowly enough to hold. A ball middled at 900 units/s
-      //    into somebody's hands is a chance, not a wicket.
-      if (ball.airborne &&
+      //  * travelling slowly enough to hold — a ball middled at 900 units/s
+      //    into somebody's hands is a chance, not a wicket;
+      //  * and either they are the one who chased it, or it has come straight
+      //    to them. A fielder rooted at deep midwicket does not catch a ball
+      //    that lands twenty units away.
+      final theirs = identical(fielder, chaser) ||
+          gap <= CricketField.catchRadius * 0.6;
+
+      if (theirs &&
+          ball.airborne &&
           ball.verticalSpeed < 0 &&
           ball.height <= CricketField.catchReach &&
           gap <= CricketField.catchRadius) {

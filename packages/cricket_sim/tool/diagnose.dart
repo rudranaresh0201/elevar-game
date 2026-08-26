@@ -12,7 +12,7 @@ void main() {
   for (final difficulty in BotDifficulty.values) {
     print('=== vs ${difficulty.name.toUpperCase()} ===');
     for (final skill in <double>[0.3, 0.6, 0.9]) {
-      _sample(difficulty: difficulty, skill: skill, matches: 40);
+      _sample(difficulty: difficulty, skill: skill, matches: 150);
     }
     print('');
   }

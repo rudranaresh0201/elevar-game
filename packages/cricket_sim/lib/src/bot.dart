@@ -77,10 +77,15 @@ class BotProfile {
   );
 
   static const BotProfile hard = BotProfile(
-    timingSpreadTicks: 9,
+    // Widened from 9 and 15 once the field stopped swallowing every lofted
+    // shot. Against a slow, realistic field those numbers meant the hard bot
+    // middled essentially everything and made 34 off twelve balls, which no
+    // human innings could chase: it won 97-100% at every standard. A bot that
+    // cannot be beaten is not a difficulty setting.
+    timingSpreadTicks: 17,
     aggression: 0.60,
-    wildSwingChance: 0.07,
-    lineReadError: 15,
+    wildSwingChance: 0.11,
+    lineReadError: 30,
     bowlingAccuracy: 0.90,
     yorkerChance: 0.38,
     catchReliability: 0.92,
@@ -200,9 +205,14 @@ class CricketBot {
 
     final direction = Vec2(lateral, -1).normalized;
 
+    // Chasing lifts the bat speed, which is right — a side needing eleven an
+    // over swings harder. It is a smaller lift than it was, because the bot
+    // always bats second and therefore always collects it: at 0.28 a good
+    // human innings simply handed the bot the extra power it needed to chase
+    // that innings down.
     final chasingHard = clampD(required - 1, 0, 1);
     final power = clampD(
-      profile.aggression + 0.28 * chasingHard + (wild ? 0.25 : 0) +
+      profile.aggression + 0.17 * chasingHard + (wild ? 0.25 : 0) +
           _battingRng.nextRange(-0.12, 0.12),
       0.05,
       1,

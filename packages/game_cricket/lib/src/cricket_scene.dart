@@ -35,6 +35,10 @@ class CricketScene extends Component {
 
     canvas
       ..save()
+      // The scene lives above the control band and nowhere else. Without this
+      // the boundary ellipse and the crease lines carry on underneath the
+      // band and draw white arcs across the buttons.
+      ..clipRect(Rect.fromLTWH(0, 0, camera.screenWidth, camera.screenHeight))
       ..translate(game.shakeOffset.dx, game.shakeOffset.dy);
 
     _paintStands(canvas, camera);
@@ -390,7 +394,9 @@ class CricketScene extends Component {
 
     for (final fielder in state.fielding) {
       final position = _lerp(fielder.previousPosition, fielder.position);
-      if (!camera.isVisible(position.y)) continue;
+      // Behind the player's own shoulder, so off screen — see
+      // [PitchCamera.showsSomeoneAt].
+      if (!camera.showsSomeoneAt(position.y)) continue;
       at(position.y, () => _paintFielder(canvas, camera, fielder, position));
     }
 
@@ -508,9 +514,7 @@ class CricketScene extends Component {
     double? bowlingArm,
   }) {
     final scale = camera.scaleAt(fieldY);
-    // In field units, so a player is about a third the width of the pitch.
-    const personHeight = 178.0;
-    final h = personHeight * scale;
+    final h = PitchCamera.personHeight * scale;
     if (h < 6) return;
 
     final feet = camera.project(fieldX, fieldY);

@@ -79,16 +79,60 @@ void main() {
     });
 
     test('scores look like a two-over innings', () {
-      // Both of these have been breached. Everything was out for 3 when the
-      // contact window was one-sided; everything scored 30-plus when a gentle
-      // push travelled far enough to beat the field every ball.
+      // Both ends of this have been breached. Everything was out for 3 when
+      // the contact window was one-sided; everything scored 30-plus when a
+      // gentle push travelled far enough to beat the field every ball.
+      //
+      // The ceiling moved from 30 to 45 deliberately. When the field was ten
+      // players all sprinting at the landing point, a two-over innings was
+      // twelve singles and four and a half wickets — correct-looking numbers
+      // for a game nobody wanted to play twice. One chaser and a human
+      // fielding speed put boundaries back in, and 20-34 off twelve balls is
+      // what a real powerplay looks like.
       for (final skill in <double>[0.3, 0.6, 0.9]) {
         final runs = averageRuns(skill: skill);
         expect(runs, greaterThan(3),
             reason: 'skill $skill is being bowled out for nothing');
-        expect(runs, lessThan(30),
+        expect(runs, lessThan(45),
             reason: 'skill $skill is scoring more than twelve balls allows');
       }
+    });
+
+    test('a real share of the innings comes in boundaries', () {
+      // The thing the whole rebalance was for, asserted rather than left to
+      // the eye. Twelve singles is technically a cricket score and it is not
+      // a game: nobody opens a shoe brand's app twice to nurdle.
+      var fours = 0;
+      var sixes = 0;
+      var scoring = 0;
+
+      for (var i = 0; i < 40; i++) {
+        final simulation = simulateHeadless(
+          seed: 4000 + i * 13,
+          mode: GameMode.vsBot,
+          botDifficulty: BotDifficulty.medium,
+          striker: proxyBatter(skill: 0.7, seed: 900 + i),
+          bowler: proxyBowler(skill: 0.7, seed: 950 + i),
+        );
+        for (final innings in <InningsState?>[
+          simulation.state.first,
+          simulation.state.second,
+        ]) {
+          if (innings == null) continue;
+          for (final ball in innings.timeline) {
+            if (ball <= 0) continue;
+            scoring++;
+            if (ball == 4) fours++;
+            if (ball == 6) sixes++;
+          }
+        }
+      }
+
+      expect(scoring, greaterThan(100), reason: 'not enough sample');
+      final boundaryShare = (fours + sixes) / scoring;
+      expect(boundaryShare, greaterThan(0.25),
+          reason: 'a scoring shot is almost never a boundary');
+      expect(sixes, greaterThan(0), reason: 'nobody can clear the rope');
     });
   });
 

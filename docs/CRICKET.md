@@ -7,9 +7,10 @@ a Flame renderer that can only look, and one line in the registry.
 - `packages/game_cricket/` — the ground, the pads, the sparks.
 - `app/lib/screens/cricket_*.dart` — mode select and the host screen.
 
-If you only read one section, read §5. Five separate things in this game came
+If you only read one section, read §5. Seven separate things in this game came
 out **backwards** and every one of them was found by running numbers, not by
-reading code.
+reading code. The largest — §5.6 — is why the game had no boundaries in it for
+a week.
 
 ---
 
@@ -67,11 +68,18 @@ pitch**, which turns timing from a guess into something you can see arriving.
 
 Three things about it are not obvious:
 
-**The eye sits 154 units behind the striker, and that number is load-bearing.**
-Anything nearer than `minDepth` is culled, so 154 puts the keeper (y 1012),
-slip (1000) and fine leg (1180) *behind the camera*. An earlier version stood
-further back and the first thing on screen was the wicketkeeper's back filling
-a third of it.
+**Depth culling is not enough to keep the foreground clear.** Standing behind
+the striker, the keeper (y 1012) and slip (1000) are only a little nearer than
+the batter, so they survive `minDepth` and then fill the bottom of the screen
+with their backs. `showsSomeoneAt` drops anybody behind the striker's crease
+outright: they are over your own shoulder in real life and they belong off
+screen.
+
+**A drawn player is 120 field units tall, which is a seventeen-metre human.**
+Life size is about twelve units against a 468-unit ground radius, and at twelve
+units nobody is visible at all. But the first attempt used 178 and the result
+was a screen full of enormous people with a cricket ground somewhere behind
+them.
 
 **There are two cameras.** Batting looks one way down the pitch; bowling looks
 the other. Watching from behind the batter you are bowling *to* would send your
@@ -122,14 +130,32 @@ matters without the answer always being "square".
 
 ## 4. One gesture per ball
 
-Batting is **drag and release**. The direction of the drag is where the ball
-goes, its length is how hard, and the moment of release is the timing. A plain
-tap is a zero-length drag, which falls out as a straight push at medium power —
-the correct beginner shot, and nobody has to be told.
+Batting is **drag and release, against an armed shot**. The direction of the
+drag is where the ball goes, its length is how hard, and the moment of release
+is the timing. A plain tap is a zero-length drag, which falls out as a straight
+push in the middle of the armed band — the correct beginner shot, and nobody
+has to be told.
 
-The alternative — a direction stick, a power slider and a swing button — is
-three targets for one thumb and turns every ball into an admin task. Ping pong's
-paddle is one finger; this had to be one finger too.
+### The three shots
+
+`BLOCK` · `GROUND` · `LOFT`, as three chunky buttons under the pad. Each is a
+power band that the drag length runs across:
+
+| | power | what it does |
+|---|---|---|
+| `BLOCK` | 0.10–0.22 | along the deck, no risk, no reward |
+| `GROUND` | 0.30–0.56 | through the gap. Fours live here |
+| `LOFT` | 0.62–1.00 | over the top. Sixes live here, and so do the catches |
+
+The first version folded loft into drag length and nothing else. That was one
+control too clever: the decision with the *risk* in it — deck or air — was
+buried in how far a thumb happened to travel, so nobody ever made it
+deliberately and every innings came out the same. Splitting it out is what
+every mobile cricket game does, and it is right for the same reason.
+
+Everything else stays in the one gesture. A direction stick, a power slider and
+a swing button would be three targets for one thumb and turn every ball into an
+admin task.
 
 Bowling is a single touch on a plan view of the pitch: line across, length down,
 plus four delivery chips. Same idea, and it means the half of the match you
@@ -149,7 +175,7 @@ PNG showed in a second.
 
 ---
 
-## 5. Five things that came out backwards
+## 5. Seven things that came out backwards
 
 Each of these passed a plausible reading of the code and was only caught by
 printing a table.
@@ -180,28 +206,58 @@ bowler input, so the bot faced an identical delivery every single ball. Half the
 table was measuring nothing at all. Worth stating plainly: **check the
 instrument before you believe the reading.**
 
+**5.6 — Every fielder chased the ball, so nothing was ever a boundary.** All ten
+ran at the predicted landing point, which meant somebody was always underneath
+it: catches ran at 13–29% *of deliveries*, wickets at four and a half an innings
+out of six, and hitting the ball harder only chose which fielder took it. A
+two-over innings was twelve singles.
+
+Two changes fixed it, and both are just "make it like real cricket":
+
+* **One chaser.** The nearest fielder runs; everyone else holds position and
+  stops only what comes to them. Standing still is not the same as being a hole
+  in the field, so a shot straight at cover is still a shot straight at cover.
+* **`fielderSpeed` 178 → 78.** At 178 units/s a fielder covered forty metres
+  during a one-and-a-half-second flight, which is roughly twice the world
+  record. 78 is a person.
+
+Catches fell to 5–11% of balls and boundaries went from one in eight to one
+scoring shot in three. This is the change the whole game turned on.
+
+**5.7 — Accurate bowling was punished.** The bot's shot direction is a unit
+vector, so its x can never exceed 0.707 for anything played down the ground —
+but it was compared against a bare ratio capped at 1. A wide ball could
+therefore never be *aligned with* however well it was read, and a straight one
+aligned almost for free. Against the hard bot, a bowler at skill 0.9 conceded 34
+off twelve balls and a bowler at skill 0.3 conceded 22. The whole ladder
+inverted on one line comparing two different spaces.
+
 ---
 
 ## 6. The ladder
 
 `dart run tool/diagnose.dart`, 60 matches per cell, scripted human proxy:
 
-| bot | skill 0.3 | 0.6 | 0.9 | secs | 4s | 6s |
+`dart run tool/diagnose.dart`, 150 matches per cell, scripted human proxy:
+
+| bot | skill 0.3 | 0.6 | 0.9 | runs | 4s | 6s |
 |---|---|---|---|---|---|---|
-| easy | 38% | 75% | 98% | 50–64 | 3–5% | 4–7% |
-| medium | 38% | 63% | 78% | 46–66 | 3–6% | 4–9% |
-| hard | 30% | 30% | 45% | 44–66 | 3–8% | 4–10% |
+| easy | 71% | 93% | 98% | 21–34 | 17–34% | 7% |
+| medium | 36% | 63% | 79% | 21–34 | 21–35% | 8–11% |
+| hard | 35% | 45% | 70% | 21–33 | 21–33% | 9–15% |
 
 Monotonic down every column and across every row, which is the property
 `test/balance_test.dart` asserts. A skilled player beats easy nearly always and
-hard slightly under half the time; a beginner wins about a third of the time
-against anything, which is deliberate — losing every match in the first two
-minutes is not a funnel.
+hard about seven times in ten; a beginner wins around a third against anything,
+which is deliberate — losing every match in the first two minutes is not a
+funnel.
 
-**Roughly one ball in eight is a boundary at high skill.** That number was
-tuned *up* on purpose. This is a game on a shoe shop's app, played by someone who
-did not come for cricket; the fours and sixes are the reason they play a second
-match.
+**About one scoring shot in three is a boundary, and a two-over innings is
+20–34.** Those numbers were tuned *up*, hard, and §5.6 is the story of why they
+had to be. This is a game on a shoe brand's app played by someone who did not
+come for cricket; the fours and sixes are the entire reason they play a second
+match. `test/balance_test.dart` now asserts the boundary share directly rather
+than trusting the eye.
 
 As with ping pong and racing, these come from a scripted proxy, not people.
 **Retune against real players before launch** — every dial is in
@@ -236,7 +292,7 @@ just the recording — in both value and time.**
 ## 8. Tests
 
 ```bash
-cd packages/cricket_sim  && dart test      # 26
+cd packages/cricket_sim  && dart test      # 27
 cd packages/game_cricket && flutter test   # 15  (11 widget + 4 golden)
 ```
 

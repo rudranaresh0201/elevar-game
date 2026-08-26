@@ -99,7 +99,7 @@ class _Band extends StatelessWidget {
                 border: Border.all(color: ElevarColors.ink, width: 3),
               ),
               child: batting
-                  ? BattingPad(
+                  ? BattingControls(
                       enabled: armed,
                       onSwing: game.setBattingInput,
                     )

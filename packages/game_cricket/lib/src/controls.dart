@@ -6,23 +6,163 @@ import 'package:flutter/widgets.dart';
 
 import 'cricket_scene.dart';
 
-/// The batting pad: one gesture carrying all three axes of a shot.
+/// What kind of shot the next swing will be.
+///
+/// The swipe says *where* and *when*. This says *how*, and it is a separate,
+/// deliberate choice because it is the one that carries the risk: keeping the
+/// ball down is safe and worth four, hitting it in the air is worth six and
+/// can be caught. Every mobile cricket game worth copying makes that a button
+/// rather than something you infer from how far your thumb happened to travel.
+enum ShotType {
+  /// Along the ground off the front foot. No risk, and no reward either.
+  defend('BLOCK'),
+
+  /// Through the gap, along the deck. Fours live here.
+  ground('GROUND'),
+
+  /// Over the top. Sixes live here, and so do the catches.
+  loft('LOFT');
+
+  const ShotType(this.label);
+
+  final String label;
+
+  /// The power band this shot occupies, which is what the simulation reads.
+  ///
+  /// `CricketSimulation._resolveContact` turns power into both bat speed and
+  /// loft, with lift starting above 0.30 — so these are genuinely three
+  /// different shots rather than three labels on one slider.
+  (double, double) get band => switch (this) {
+        ShotType.defend => (0.10, 0.22),
+        ShotType.ground => (0.30, 0.56),
+        ShotType.loft => (0.62, 1.0),
+      };
+}
+
+/// The batting controls: a swipe pad, and the three shots you can play with it.
+///
+/// Owns which shot is armed, so the pad below stays a pure gesture surface.
+/// Defaults to [ShotType.ground] — the shot that scores without getting you
+/// out.
+class BattingControls extends StatefulWidget {
+  const BattingControls({
+    required this.onSwing,
+    required this.enabled,
+    super.key,
+  });
+
+  final void Function(CricketInput input) onSwing;
+  final bool enabled;
+
+  @override
+  State<BattingControls> createState() => _BattingControlsState();
+}
+
+class _BattingControlsState extends State<BattingControls> {
+  ShotType _shot = ShotType.ground;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: <Widget>[
+        Expanded(
+          child: BattingPad(
+            enabled: widget.enabled,
+            shot: _shot,
+            onSwing: widget.onSwing,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: <Widget>[
+            for (final shot in ShotType.values)
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 3),
+                  child: _ShotChip(
+                    shot: shot,
+                    selected: _shot == shot,
+                    onTap: () => setState(() => _shot = shot),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ShotChip extends StatelessWidget {
+  const _ShotChip({
+    required this.shot,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final ShotType shot;
+  final bool selected;
+  final VoidCallback onTap;
+
+  static Color _colourFor(ShotType shot) => switch (shot) {
+        ShotType.defend => ElevarColors.muted,
+        ShotType.ground => CricketColors.perfect,
+        ShotType.loft => CricketColors.ball,
+      };
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 42,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: selected ? _colourFor(shot) : ElevarColors.surfaceRaised,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: ElevarColors.ink,
+            width: selected ? 4 : 3,
+          ),
+        ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 5),
+            child: Text(
+              shot.label,
+              style: ElevarType.display(
+                14,
+                color: selected ? ElevarColors.white : ElevarColors.muted,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The batting pad: one gesture carrying direction, weight and timing.
 ///
 /// Drag to aim and release to play. The direction of the drag is where the ball
-/// goes, its length is how hard, and **the moment of release is the timing** —
-/// which is the whole skill of batting.
+/// goes, its length is how hard *within the armed shot*, and **the moment of
+/// release is the timing** — which is the whole skill of batting.
 ///
-/// Folding three inputs into one gesture is what makes this feel like ping
-/// pong's paddle rather than a control panel. The alternative — a direction
-/// stick, a power slider and a swing button — is three targets for one thumb
-/// and turns every ball into an admin task.
+/// Folding those into one gesture is what makes this feel like ping pong's
+/// paddle rather than a control panel. The one thing deliberately *not* in the
+/// gesture is the shot type: whether the ball goes along the deck or over the
+/// top is the decision with the risk in it, and burying it in how far a thumb
+/// travelled meant nobody ever chose it. See [ShotType].
 ///
-/// A plain tap is a zero-length drag, which falls out as a straight push at
-/// medium power. That is the correct beginner shot and nobody has to be told.
+/// A plain tap is a zero-length drag, which falls out as a straight push in
+/// the middle of the armed band. That is the correct beginner shot and nobody
+/// has to be told.
 class BattingPad extends StatefulWidget {
   const BattingPad({
     required this.onSwing,
     required this.enabled,
+    this.shot = ShotType.ground,
     super.key,
   });
 
@@ -32,6 +172,9 @@ class BattingPad extends StatefulWidget {
   /// False between balls, so a jab at the screen does not spend the next
   /// delivery's shot before the bowler has run in.
   final bool enabled;
+
+  /// Which shot is armed. Sets the power band the drag length runs across.
+  final ShotType shot;
 
   @override
   State<BattingPad> createState() => _BattingPadState();
@@ -77,14 +220,20 @@ class _BattingPadState extends State<BattingPad> {
         ? const Offset(0, -1)
         : delta / distance;
 
+    // The drag runs across the armed shot's band rather than across the whole
+    // power range, so choosing LOFT always lofts and choosing GROUND never
+    // hands a catch to mid-off.
+    final (low, high) = widget.shot.band;
+    final reach = distance < 6
+        ? 0.5
+        : math.min(distance / _fullPower, 1).toDouble();
+
     widget.onSwing(
       CricketInput(
         action: true,
         x: (direction.dx + 1) / 2,
         y: (direction.dy + 1) / 2,
-        power: distance < 6
-            ? 0.45
-            : math.min(distance / _fullPower, 1).toDouble(),
+        power: low + (high - low) * reach,
       ),
     );
   }
@@ -103,7 +252,9 @@ class _BattingPadState extends State<BattingPad> {
           child: _from != null
               ? null
               : Text(
-                  widget.enabled ? 'SWIPE TO PLAY' : 'WAIT FOR THE BALL',
+                  widget.enabled
+                      ? 'SWIPE · ${widget.shot.label}'
+                      : 'WAIT FOR THE BALL',
                   style: ElevarType.label(
                     12,
                     color: widget.enabled

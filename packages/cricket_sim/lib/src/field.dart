@@ -123,7 +123,16 @@ abstract final class CricketField {
 
   /// Was 232, which let the field converge on any shot inside a second and
   /// made placement irrelevant. A gap has to be worth finding.
-  static const double fielderSpeed = 178;
+  static const double fielderSpeed = 78;
+
+  /// How fast a fielder who is *not* chasing wanders towards the ball, as a
+  /// fraction of [fielderSpeed], and how close they are allowed to get.
+  ///
+  /// Purely cosmetic. It exists so a field does not look frozen while one
+  /// player runs, and it is capped hard because a second chaser is how the
+  /// game lost its boundaries in the first place.
+  static const double backingUpPace = 0.22;
+  static const double backingUpRadius = 150;
 
   /// How close a fielder must get to collect a ball on the ground, or to be
   /// under one in the air.

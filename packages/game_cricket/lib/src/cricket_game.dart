@@ -156,7 +156,10 @@ class CricketGame extends FlameGame {
 
     // Proportional to the screen, floored so it stays thumb-sized on a small
     // phone and capped so it does not eat a tablet.
-    bandHeight = clampD(size.y * 0.24, 168, 300);
+    // Taller than it was: the batting band now carries the three shot
+    // buttons under the swipe pad, and a shot you cannot reach is a shot
+    // nobody plays.
+    bandHeight = clampD(size.y * 0.29, 208, 340);
 
     _lastSize = size.clone();
     _rebuildCamera();

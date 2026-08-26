@@ -92,7 +92,7 @@ void main() {
 
       // The whole point of reserving the band first: the scene is built into
       // the space above it, so no part of the ground sits under a thumb.
-      expect(harness.game.bandHeight, greaterThan(150));
+      expect(harness.game.bandHeight, greaterThan(200));
       expect(camera.screenHeight,
           closeTo(844 - harness.game.bandHeight, 0.5));
 
@@ -122,7 +122,8 @@ void main() {
           CricketField.pitchCentreX, CricketField.strikerY);
       expect(batter.dy, lessThan(camera.screenHeight));
       expect(batter.dy, greaterThan(camera.horizon));
-      expect(178 * camera.scaleAt(CricketField.strikerY), greaterThan(80),
+      expect(PitchCamera.personHeight * camera.scaleAt(CricketField.strikerY),
+          greaterThan(60),
           reason: 'the batter is smaller than a thumbnail');
     });
 

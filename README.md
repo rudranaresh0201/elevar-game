@@ -11,7 +11,7 @@ that does not exist yet.
 - [`docs/PLAN.md`](docs/PLAN.md) — the full end-to-end plan
 - [`docs/RACING.md`](docs/RACING.md) — how the racing game works, and the two
   things that had to be measured rather than reasoned about
-- [`docs/CRICKET.md`](docs/CRICKET.md) — the cricket build, and the five things
+- [`docs/CRICKET.md`](docs/CRICKET.md) — the cricket build, and the seven things
   that came out backwards until they were measured
 - [`docs/DEPLOY.md`](docs/DEPLOY.md) — getting a playable link out: the web
   build, the droplet, and what the browser cannot do
@@ -108,7 +108,7 @@ getting the phone to show up.
 cd packages/game_core    && dart test    # 24
 cd packages/pingpong_sim && dart test    # 28
 cd packages/racing_sim   && dart test    # 44
-cd packages/cricket_sim  && dart test    # 26
+cd packages/cricket_sim  && dart test    # 27
 
 # widget and golden tests
 cd packages/game_pingpong && flutter test  #  7
@@ -117,7 +117,7 @@ cd packages/game_cricket  && flutter test  # 15
 cd app                    && flutter test  # 42
 ```
 
-203 tests, all green.
+204 tests, all green.
 
 ### What the tests are actually for
 
