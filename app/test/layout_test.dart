@@ -66,6 +66,21 @@ void main() {
         await tester.pumpAndSettle();
       });
 
+      testWidgets('the cricket mode select lays out', (tester) async {
+        await pumpAt(tester, entry.value);
+        await tester.tap(find.text('CRICKET'));
+        await tester.pumpAndSettle();
+        expect(find.text('START MATCH'), findsOneWidget);
+
+        // CHASE is the longest description on the screen and HARD adds a
+        // second line under the opposition row, so this is the tall case.
+        await tester.tap(find.text('CHASE · 4'));
+        await tester.tap(find.text('HARD'));
+        await tester.pumpAndSettle();
+        await tester.drag(find.text('FORMAT'), const Offset(0, -400));
+        await tester.pumpAndSettle();
+      });
+
       testWidgets('the racing mode select lays out', (tester) async {
         await pumpAt(tester, entry.value);
         await tester.tap(find.text('CAR\nRACING'));

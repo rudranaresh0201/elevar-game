@@ -22,6 +22,10 @@ dependencies:
     path: ../packages/game_racing
   racing_sim:
     path: ../packages/racing_sim
+  game_cricket:
+    path: ../packages/game_cricket
+  cricket_sim:
+    path: ../packages/cricket_sim
   # The local points ledger. Hand-written SQL rather than an ORM — see
   # `lib/data/points_repository.dart` for why.
   sqflite: ^2.4.1

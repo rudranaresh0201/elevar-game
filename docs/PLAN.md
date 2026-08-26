@@ -604,7 +604,7 @@ Leaderboards (Redis ZSETs + WS push), daily streaks, profile, match history, pla
 rules + `cheat_flags`, admin panel (Retool or a minimal internal Fastify UI), Sentry,
 push notifications. Play Store internal testing track → closed beta with ~50 real users.
 
-### Phase 4 — Games 2–4 · 🔨 game 2 built, out of order
+### Phase 4 — Games 2–4 · 🔨 games 2 and 3 built, out of order
 Taken early, ahead of the backend, because it was the cheapest way to find out
 whether the plugin contract was real. It was: adding racing changed nothing in
 scoring, in the result screen, or in the hub. Two things the plan had not
@@ -617,7 +617,14 @@ Also landed here, because racing needed them:
   Phase 2, ready for the server to be pointed at
 - a rewards catalogue screen, so a player can see what they are earning towards
 
-Remaining: games 3 and 4. Budget ~1 week each now the shared layer is proven.
+Game 3, cricket, followed and changed nothing again — see
+[`CRICKET.md`](CRICKET.md). It is the harder test of the contract than racing
+was, because it is not symmetric: one player bats while the other bowls, the
+innings has structure, and it ships single-player only. `supportedModes` being a
+set rather than a boolean is what absorbed that, and it is why the hub, the
+result screen, the points formula and the ledger are all untouched.
+
+Remaining: game 4. Budget ~1 week now the shared layer has survived three.
 
 ### Phase 5 — Rewards · ~3 weeks
 Rewards catalogue, redemption flow with hold→confirm→settle ledger states, voucher

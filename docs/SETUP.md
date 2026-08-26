@@ -66,21 +66,23 @@ flutter pub get     # once, from the ROOT — this is a pub workspace, one lockf
 flutter analyze     # must print "No issues found!"
 ```
 
-Then the six suites — **154 tests**:
+Then the eight suites — **201 tests**:
 
 ```powershell
 cd packages\game_core   ; dart test        # 24  RNG, fixed timestep, sweep, replay codec
 cd ..\pingpong_sim      ; dart test        # 28  pong rules, physics, bot balance, replay verify
-cd ..\racing_sim        ; dart test        # 42  track, car physics, bot ladder, replay verify
+cd ..\racing_sim        ; dart test        # 44  track, car physics, bot ladder, replay verify
+cd ..\cricket_sim       ; dart test        # 26  innings, fielding, scoring, bot ladder, replay verify
 cd ..\game_pingpong     ; flutter test     #  7  widget, multi-touch, goldens
-cd ..\game_racing       ; flutter test     # 14  widget, four-thumb multi-touch, replay verify, goldens
-cd ..\..\app            ; flutter test     # 39  hub, mode select, rewards, layout, points ledger
+cd ..\game_racing       ; flutter test     # 17  widget, four-thumb multi-touch, replay verify, goldens
+cd ..\game_cricket      ; flutter test     # 13  widget, batting and bowling pads, replay verify, goldens
+cd ..\..\app            ; flutter test     # 42  hub, mode select, rewards, layout, points ledger
 ```
 
-The two that matter most are `pingpong_sim/test/simulation_test.dart` and
-`racing_sim/test/simulation_test.dart`. Each plays a match, records it, replays
+The three that matter most are `pingpong_sim`, `racing_sim` and
+`cricket_sim`'s `simulation_test.dart`. Each plays a match, records it, replays
 it, and asserts the score reproduces exactly — then confirms a forged score does
-not survive. **If either goes red, no score the server receives can be
+not survive. **If any goes red, no score the server receives can be
 verified.**
 
 ### A note on golden tests

@@ -258,12 +258,9 @@ void main() {
       // mishit. Every difficulty ladder came out backwards because of it.
       const striker = Vec2(CricketField.pitchCentreX, CricketField.strikerY);
 
+      // The same arithmetic the simulation uses, against the same constant:
+      // if `unitsPerRun` moves, this moves with it.
       int runsAt(double distance) {
-        final simulation = CricketSimulation(
-          seed: 1,
-          mode: GameMode.local2P,
-        );
-        // Reach into the same arithmetic the simulation uses.
         final where = Vec2(striker.x, striker.y - distance);
         return (where - striker).length ~/ CricketField.unitsPerRun;
       }

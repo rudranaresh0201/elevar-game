@@ -4,13 +4,15 @@ A casual game hub. Games are played entirely **on one device** — two humans
 sharing a screen, or one human against a bot. The app stays online for identity,
 a single cross-game points currency, and leaderboards.
 
-**Two games are built and playable, fully offline:** ping pong and car racing.
-Points are banked in a real on-device ledger and queued for a server that does
-not exist yet.
+**Three games are built and playable, fully offline:** ping pong, car racing and
+cricket. Points are banked in a real on-device ledger and queued for a server
+that does not exist yet.
 
 - [`docs/PLAN.md`](docs/PLAN.md) — the full end-to-end plan
 - [`docs/RACING.md`](docs/RACING.md) — how the racing game works, and the two
   things that had to be measured rather than reasoned about
+- [`docs/CRICKET.md`](docs/CRICKET.md) — the cricket build, and the five things
+  that came out backwards until they were measured
 
 ---
 
@@ -24,11 +26,14 @@ packages/
   game_core/            ⭐ PURE DART — deterministic engine primitives
   pingpong_sim/         ⭐ PURE DART — the ping pong rules and physics
   racing_sim/           ⭐ PURE DART — the racing rules, track and physics
+  cricket_sim/          ⭐ PURE DART — the cricket rules, fielding and bot
   game_pingpong/        Flame renderer + touch layer
   game_racing/          Flame renderer + the four-button control bands
+  game_cricket/         Flame renderer + the one-gesture batting and bowling pads
   design_system/        colours, type, chunky controls
 docs/PLAN.md            the end-to-end plan
 docs/RACING.md          the racing build notes
+docs/CRICKET.md         the cricket build notes
 ```
 
 **Adding a game touches two files.** An `ElevarGame` implementation and a line
@@ -37,7 +42,8 @@ and the ledger never learn that it exists — every game reduces to a
 `GameResult`, and the payout only ever reads `normalizedSkill`. That contract
 was specified in `PLAN.md` §4 from the start and built when racing arrived,
 because an interface derived from one implementation is a description of that
-implementation.
+implementation. Cricket is the proof it was real: a game with a different shape
+entirely — an innings, two roles, one player — cost the hub exactly one line.
 
 The starred simulation packages import no Flutter and no Flame. That is what
 lets the Phase 5 server worker re-run a submitted match and check its score —
@@ -87,15 +93,17 @@ getting the phone to show up.
 # pure Dart — fast, no device needed
 cd packages/game_core    && dart test    # 24
 cd packages/pingpong_sim && dart test    # 28
-cd packages/racing_sim   && dart test    # 42
+cd packages/racing_sim   && dart test    # 44
+cd packages/cricket_sim  && dart test    # 26
 
 # widget and golden tests
 cd packages/game_pingpong && flutter test  #  7
-cd packages/game_racing   && flutter test  # 14
-cd app                    && flutter test  # 39
+cd packages/game_racing   && flutter test  # 17
+cd packages/game_cricket  && flutter test  # 13
+cd app                    && flutter test  # 42
 ```
 
-154 tests, all green.
+201 tests, all green.
 
 ### What the tests are actually for
 
@@ -122,6 +130,16 @@ cd app                    && flutter test  # 39
 - **`packages/game_racing/test/race_view_test.dart`** — plays through the real
   widget with real thumbs, including four buttons at once, then verifies the
   replay it produced.
+- **`packages/cricket_sim/test/simulation_test.dart`** — determinism and replay
+  verification again, plus the scoring rule that was inverted for a day:
+  [`docs/CRICKET.md`](docs/CRICKET.md) §4.1.
+- **`packages/cricket_sim/test/balance_test.dart`** — the ladder is monotonic in
+  both directions and every innings terminates.
+- **`packages/game_cricket/test/cricket_view_test.dart`** — a whole match played
+  through the real pads with real taps, then replayed and checked to the run.
+- **`app/test/layout_test.dart`** — every screen built at 320, 390 and 430pt. A
+  Flutter overflow is a `FlutterError` during layout, so building it is the
+  assertion.
 - **`app/test/points_repository_test.dart`** — the ledger. Sum of every delta
   equals the balance, the daily cap holds, diminishing returns diminish, and a
   zero-paying match is still auditable.
