@@ -1,325 +1,218 @@
-import 'dart:math' as math;
-
 import 'package:cricket_sim/cricket_sim.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/widgets.dart';
 
 import 'cricket_scene.dart';
 
-/// What kind of shot the next swing will be.
+/// The crease, as a surface a thumb lives on.
 ///
-/// The swipe says *where* and *when*. This says *how*, and it is a separate,
-/// deliberate choice because it is the one that carries the risk: keeping the
-/// ball down is safe and worth four, hitting it in the air is worth six and
-/// can be caught. Every mobile cricket game worth copying makes that a button
-/// rather than something you infer from how far your thumb happened to travel.
-enum ShotType {
-  /// Along the ground off the front foot. No risk, and no reward either.
-  defend('BLOCK'),
+/// This replaced a swipe pad with three shot buttons under it, and the change
+/// is the whole point of the rebuild: **the bat is not a shot you choose, it is
+/// a thing you hold somewhere.** Across the pad is across the crease; up and
+/// down the pad raises and lowers the blade. Nothing here decides a direction,
+/// a power or a shot type — the simulation reads the bat's own position and
+/// velocity at the instant the ball reaches it, and every one of those falls
+/// out for free.
+///
+/// Three consequences worth knowing, all of them the reason it is better:
+///
+/// * **Power is not a control.** How hard the ball goes is how fast the blade
+///   was moving, so a player who flicks their thumb through the line hits it
+///   further than one who parks it there. Nobody has to be taught that.
+/// * **There is no timing window to be inside or outside of.** You are either
+///   in the ball's way or you are not, which is also what being bowled *is*.
+/// * **You can change your mind late, and it costs you.** The blade has a
+///   speed cap, so a correction made after the ball pitches is a correction
+///   that may not arrive.
+class BatPad extends StatefulWidget {
+  const BatPad({
+    required this.onMove,
+    required this.enabled,
+    this.ballLine,
+    super.key,
+  });
 
-  /// Through the gap, along the deck. Fours live here.
-  ground('GROUND'),
+  /// Fired continuously while a thumb is down, and once on release.
+  final void Function(CricketInput input) onMove;
 
-  /// Over the top. Sixes live here, and so do the catches.
-  loft('LOFT');
+  /// False between balls. The bat still exists — it drifts back to its stance
+  /// — but nothing the thumb does is worth sending.
+  final bool enabled;
 
-  const ShotType(this.label);
-
-  final String label;
-
-  /// The power band this shot occupies, which is what the simulation reads.
+  /// Where the ball is heading across the crease, normalised, or null.
   ///
-  /// `CricketSimulation._resolveContact` turns power into both bat speed and
-  /// loft, with lift starting above 0.30 — so these are genuinely three
-  /// different shots rather than three labels on one slider.
-  (double, double) get band => switch (this) {
-        ShotType.defend => (0.10, 0.22),
-        ShotType.ground => (0.30, 0.56),
-        ShotType.loft => (0.62, 1.0),
-      };
-}
-
-/// The batting controls: a swipe pad, and the three shots you can play with it.
-///
-/// Owns which shot is armed, so the pad below stays a pure gesture surface.
-/// Defaults to [ShotType.ground] — the shot that scores without getting you
-/// out.
-class BattingControls extends StatefulWidget {
-  const BattingControls({
-    required this.onSwing,
-    required this.enabled,
-    super.key,
-  });
-
-  final void Function(CricketInput input) onSwing;
-  final bool enabled;
+  /// The batting assist, and deliberately a *pre-bounce* projection: it shows
+  /// the line the ball is on, not the line it will end up on after it deviates
+  /// off the seam. An assist that gave away the movement would remove the only
+  /// thing a bowler has.
+  final double? ballLine;
 
   @override
-  State<BattingControls> createState() => _BattingControlsState();
+  State<BatPad> createState() => _BatPadState();
 }
 
-class _BattingControlsState extends State<BattingControls> {
-  ShotType _shot = ShotType.ground;
+class _BatPadState extends State<BatPad> {
+  /// Where the thumb is, in the pad's own 0..1 space.
+  Offset _at = Offset(
+    CricketField.batStance.x,
+    CricketField.batStance.y,
+  );
 
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: <Widget>[
-        Expanded(
-          child: BattingPad(
-            enabled: widget.enabled,
-            shot: _shot,
-            onSwing: widget.onSwing,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: <Widget>[
-            for (final shot in ShotType.values)
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 3),
-                  child: _ShotChip(
-                    shot: shot,
-                    selected: _shot == shot,
-                    onTap: () => setState(() => _shot = shot),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ],
+  bool _down = false;
+
+  void _send(Offset local, Size size) {
+    final normalised = Offset(
+      (local.dx / size.width).clamp(0.0, 1.0),
+      (local.dy / size.height).clamp(0.0, 1.0),
     );
-  }
-}
-
-class _ShotChip extends StatelessWidget {
-  const _ShotChip({
-    required this.shot,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final ShotType shot;
-  final bool selected;
-  final VoidCallback onTap;
-
-  static Color _colourFor(ShotType shot) => switch (shot) {
-        ShotType.defend => ElevarColors.muted,
-        ShotType.ground => CricketColors.perfect,
-        ShotType.loft => CricketColors.ball,
-      };
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 42,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: selected ? _colourFor(shot) : ElevarColors.surfaceRaised,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: ElevarColors.ink,
-            width: selected ? 4 : 3,
-          ),
-        ),
-        child: FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 5),
-            child: Text(
-              shot.label,
-              style: ElevarType.display(
-                14,
-                color: selected ? ElevarColors.white : ElevarColors.muted,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// The batting pad: one gesture carrying direction, weight and timing.
-///
-/// Drag to aim and release to play. The direction of the drag is where the ball
-/// goes, its length is how hard *within the armed shot*, and **the moment of
-/// release is the timing** — which is the whole skill of batting.
-///
-/// Folding those into one gesture is what makes this feel like ping pong's
-/// paddle rather than a control panel. The one thing deliberately *not* in the
-/// gesture is the shot type: whether the ball goes along the deck or over the
-/// top is the decision with the risk in it, and burying it in how far a thumb
-/// travelled meant nobody ever chose it. See [ShotType].
-///
-/// A plain tap is a zero-length drag, which falls out as a straight push in
-/// the middle of the armed band. That is the correct beginner shot and nobody
-/// has to be told.
-class BattingPad extends StatefulWidget {
-  const BattingPad({
-    required this.onSwing,
-    required this.enabled,
-    this.shot = ShotType.ground,
-    super.key,
-  });
-
-  /// Fired once, on release.
-  final void Function(CricketInput input) onSwing;
-
-  /// False between balls, so a jab at the screen does not spend the next
-  /// delivery's shot before the bowler has run in.
-  final bool enabled;
-
-  /// Which shot is armed. Sets the power band the drag length runs across.
-  final ShotType shot;
-
-  @override
-  State<BattingPad> createState() => _BattingPadState();
-}
-
-class _BattingPadState extends State<BattingPad> {
-  Offset? _from;
-  Offset? _to;
-
-  /// Drag distance that counts as full power. Deliberately short — a phone is
-  /// not very tall and a shot that needs half the screen to play is a shot
-  /// nobody plays twice.
-  static const double _fullPower = 110;
-
-  void _start(Offset at) {
+    setState(() => _at = normalised);
     if (!widget.enabled) return;
-    setState(() {
-      _from = at;
-      _to = at;
-    });
-  }
-
-  void _move(Offset at) {
-    if (_from == null) return;
-    setState(() => _to = at);
-  }
-
-  void _end() {
-    final from = _from;
-    final to = _to;
-    setState(() {
-      _from = null;
-      _to = null;
-    });
-    if (from == null || to == null || !widget.enabled) return;
-
-    final delta = to - from;
-    final distance = delta.distance;
-
-    // Screen y and field y both increase downwards, so a swipe up the screen
-    // is a shot back down the ground with no flipping needed.
-    final direction = distance < 6
-        ? const Offset(0, -1)
-        : delta / distance;
-
-    // The drag runs across the armed shot's band rather than across the whole
-    // power range, so choosing LOFT always lofts and choosing GROUND never
-    // hands a catch to mid-off.
-    final (low, high) = widget.shot.band;
-    final reach = distance < 6
-        ? 0.5
-        : math.min(distance / _fullPower, 1).toDouble();
-
-    widget.onSwing(
-      CricketInput(
-        action: true,
-        x: (direction.dx + 1) / 2,
-        y: (direction.dy + 1) / 2,
-        power: low + (high - low) * reach,
-      ),
-    );
+    // `action` and `power` are the bowler's channels; batting spends only two.
+    widget.onMove(CricketInput(x: normalised.dx, y: normalised.dy));
   }
 
   @override
   Widget build(BuildContext context) {
-    return Listener(
-      behavior: HitTestBehavior.opaque,
-      onPointerDown: (e) => _start(e.localPosition),
-      onPointerMove: (e) => _move(e.localPosition),
-      onPointerUp: (_) => _end(),
-      onPointerCancel: (_) => _end(),
-      child: CustomPaint(
-        painter: _ShotPainter(from: _from, to: _to, enabled: widget.enabled),
-        child: Center(
-          child: _from != null
-              ? null
-              : Text(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = Size(constraints.maxWidth, constraints.maxHeight);
+        return Listener(
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: (e) {
+            setState(() => _down = true);
+            _send(e.localPosition, size);
+          },
+          onPointerMove: (e) => _send(e.localPosition, size),
+          onPointerUp: (_) => setState(() => _down = false),
+          onPointerCancel: (_) => setState(() => _down = false),
+          child: CustomPaint(
+            painter: _CreasePainter(
+              at: _at,
+              holding: _down,
+              enabled: widget.enabled,
+              ballLine: widget.ballLine,
+            ),
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
                   widget.enabled
-                      ? 'SWIPE · ${widget.shot.label}'
+                      ? (_down ? 'SWING THROUGH IT' : 'DRAG THE BAT')
                       : 'WAIT FOR THE BALL',
                   style: ElevarType.label(
-                    12,
+                    11,
                     color: widget.enabled
                         ? ElevarColors.white
                         : ElevarColors.muted,
                   ),
                 ),
-        ),
-      ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
 
-/// Draws the aim arrow and the power it carries, live under the thumb.
-class _ShotPainter extends CustomPainter {
-  const _ShotPainter({
-    required this.from,
-    required this.to,
+/// Draws the crease the thumb is moving the bat around.
+class _CreasePainter extends CustomPainter {
+  const _CreasePainter({
+    required this.at,
+    required this.holding,
     required this.enabled,
+    required this.ballLine,
   });
 
-  final Offset? from;
-  final Offset? to;
+  final Offset at;
+  final bool holding;
   final bool enabled;
+  final double? ballLine;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final from = this.from;
-    final to = this.to;
-    if (from == null || to == null) return;
+    final ink = Paint()
+      ..color = ElevarColors.ink
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
 
-    final delta = to - from;
-    final distance = delta.distance;
-    final power = math.min(distance / 110, 1).toDouble();
+    // The ground, at the bottom of the pad, because down the pad is down
+    // toward the turf.
+    canvas.drawLine(
+      Offset(0, size.height - 6),
+      Offset(size.width, size.height - 6),
+      Paint()
+        ..color = CricketColors.pitch
+        ..strokeWidth = 6,
+    );
 
-    final colour = Color.lerp(
-      ElevarColors.table,
-      ElevarColors.p1,
-      power,
-    )!;
+    // Stump line, so "straight" is a visible place rather than a guess.
+    final middle = size.width / 2;
+    canvas.drawLine(
+      Offset(middle, 18),
+      Offset(middle, size.height - 6),
+      Paint()
+        ..color = ElevarColors.muted.withValues(alpha: 0.35)
+        ..strokeWidth = 2,
+    );
 
-    canvas
-      ..drawCircle(
-        from,
-        30,
+    // Where the ball is coming.
+    final line = ballLine;
+    if (line != null && enabled) {
+      final x = line * size.width;
+      canvas.drawLine(
+        Offset(x, 16),
+        Offset(x, size.height - 6),
         Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 4
-          ..color = ElevarColors.white.withValues(alpha: 0.35),
-      )
-      // The shot itself: thicker and redder the harder it is being hit.
-      ..drawLine(
-        from,
-        to,
-        Paint()
-          ..color = colour
-          ..strokeWidth = 6 + 10 * power
-          ..strokeCap = StrokeCap.round,
-      )
-      ..drawCircle(to, 12 + 10 * power, Paint()..color = colour);
+          ..color = CricketColors.ball.withValues(alpha: 0.75)
+          ..strokeWidth = 3,
+      );
+      canvas.drawCircle(
+        Offset(x, size.height - 10),
+        7,
+        Paint()..color = CricketColors.ball,
+      );
+    }
+
+    // The blade. Drawn where the thumb is rather than where the simulation has
+    // got the bat to, on purpose: this is the control, and a control that lags
+    // its own input feels broken even when the thing it drives is correct. The
+    // real bat, speed-capped and possibly behind, is the one in the scene.
+    final centre = Offset(at.dx * size.width, at.dy * size.height);
+    final blade = Rect.fromCenter(
+      center: centre,
+      width: size.width * 0.13,
+      height: size.height * 0.34,
+    );
+    final body = RRect.fromRectAndRadius(blade, const Radius.circular(6));
+
+    canvas.drawRRect(
+      body,
+      Paint()
+        ..color = enabled
+            ? (holding ? CricketColors.bat : CricketColors.bat.withValues(alpha: 0.75))
+            : ElevarColors.muted.withValues(alpha: 0.4),
+    );
+    canvas.drawRRect(body, ink..strokeWidth = 3);
+
+    // Handle, so which end is which is obvious at a glance.
+    canvas.drawLine(
+      Offset(centre.dx, blade.top),
+      Offset(centre.dx, blade.top - size.height * 0.12),
+      Paint()
+        ..color = ElevarColors.ink
+        ..strokeWidth = 7
+        ..strokeCap = StrokeCap.round,
+    );
   }
 
   @override
-  bool shouldRepaint(_ShotPainter old) =>
-      old.from != from || old.to != to || old.enabled != enabled;
+  bool shouldRepaint(_CreasePainter old) =>
+      old.at != at ||
+      old.holding != holding ||
+      old.enabled != enabled ||
+      old.ballLine != ballLine;
 }
 
 /// The bowling pad: a plan view of the pitch you drop the ball onto.

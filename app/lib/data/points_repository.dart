@@ -64,6 +64,14 @@ abstract class PointsRepository {
 
   Future<int> balance();
 
+  /// Every point ever earned, before anything was spent.
+  ///
+  /// Separate from [balance] because the leaderboard ranks on this one:
+  /// spending points on a voucher must not cost a player their place on the
+  /// board, or the rewards shop and the leaderboard are in direct competition
+  /// and the player has to pick one.
+  Future<int> lifetimePoints();
+
   Future<List<GameStat>> perGameStats();
 
   Future<List<LedgerEntry>> recentLedger({int limit = 30});
@@ -335,6 +343,13 @@ class SqlitePointsRepository implements PointsRepository {
     final db = await _db;
     final rows = await db.query('user_balance', where: 'id = 1');
     return rows.isEmpty ? 0 : rows.first['points_balance']! as int;
+  }
+
+  @override
+  Future<int> lifetimePoints() async {
+    final db = await _db;
+    final rows = await db.query('user_balance', where: 'id = 1');
+    return rows.isEmpty ? 0 : rows.first['lifetime_points']! as int;
   }
 
   @override

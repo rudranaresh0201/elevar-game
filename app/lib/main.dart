@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'data/ledger_platform.dart';
-import 'screens/home_screen.dart';
+import 'screens/shell_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,7 +29,7 @@ class ElevarPlayApp extends StatelessWidget {
       title: 'Elevar Play',
       debugShowCheckedModeBanner: false,
       theme: ElevarTheme.build(),
-      home: const HomeScreen(),
+      home: const ElevarShell(),
     );
   }
 }

@@ -19,6 +19,11 @@ class FakePointsRepository implements PointsRepository {
   });
 
   int balanceValue;
+
+  /// Defaults to the balance, which is true until something is spent.
+  int? lifetimeOverride;
+  int get lifetimeValue => lifetimeOverride ?? balanceValue;
+
   int matchesToday;
   int pointsToday;
   int streakDays;
@@ -29,6 +34,9 @@ class FakePointsRepository implements PointsRepository {
 
   @override
   Future<int> balance() async => balanceValue;
+
+  @override
+  Future<int> lifetimePoints() async => lifetimeValue;
 
   @override
   Future<List<GameStat>> perGameStats() async => stats;

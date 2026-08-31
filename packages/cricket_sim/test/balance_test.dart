@@ -30,16 +30,20 @@ void main() {
     );
   }
 
-  /// 60 matches, not 30.
+  /// 120 matches, not 30, and not 60.
   ///
   /// A win rate off 30 samples carries about nine points of standard error,
   /// and the gaps between adjacent difficulties are only ten to fifteen points
   /// wide — so a monotonicity assertion on 30 matches fails on noise perhaps
-  /// one run in five while the ladder underneath it is perfectly ordered.
+  /// one run in five while the ladder underneath it is perfectly ordered. 60
+  /// halves that and was still not enough: the seed set below produced a
+  /// one-match inversion between easy and medium while `tool/diagnose.dart`,
+  /// over more matches, showed a sixteen-point gap. A match is a few hundred
+  /// microseconds headless; the sample is the cheap part.
   double winRate({
     required BotDifficulty difficulty,
     required double skill,
-    int matches = 60,
+    int matches = 120,
   }) {
     var won = 0;
     for (var i = 0; i < matches; i++) {
@@ -51,7 +55,11 @@ void main() {
     return won / matches;
   }
 
-  double averageRuns({required double skill, int matches = 30}) {
+  /// 60 matches, for the same reason [winRate] uses 60: a two-over innings has
+  /// a standard deviation of several runs, and the gap between adjacent skill
+  /// levels is about a run and a half. At 30 samples this assertion failed on
+  /// noise while the slope underneath it was clean.
+  double averageRuns({required double skill, int matches = 60}) {
     var total = 0;
     for (var i = 0; i < matches; i++) {
       total += play(

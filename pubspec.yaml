@@ -15,3 +15,5 @@ workspace:
   - packages/game_racing
   - packages/cricket_sim
   - packages/game_cricket
+  - packages/soccer_sim
+  - packages/game_soccer

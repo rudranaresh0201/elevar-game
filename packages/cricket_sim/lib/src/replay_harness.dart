@@ -1,5 +1,6 @@
 import 'package:game_core/game_core.dart';
 
+import 'bot.dart';
 import 'field.dart';
 import 'ground.dart';
 import 'simulation.dart';
@@ -179,58 +180,114 @@ CricketInput Function(CricketState, int) proxyBatter({
 }) {
   final s = clampD(skill, 0, 1);
   final rng = DeterministicRng.stream(seed, 91);
-  // Wide enough at the bottom of the range that a poor player is genuinely
-  // beaten sometimes: against a 22-tick window, skill 0.3 misses about one
-  // ball in seven and skill 0.9 almost never.
-  final spread = (34 - 26 * s).round();
 
-  var plannedTick = -1;
-  var plannedX = 0.5;
-  var plannedY = 0.0;
-  var plannedPower = 0.5;
+  // Timing spread, in ticks, on when the sweep starts, and how far off the
+  // real line the proxy reads the ball, in field units. Both at the wide end
+  // of their range; a good delivery widens them further, below.
+  final baseSpread = 30 - 23 * s;
+  final baseReadError = 62 - 47 * s;
+
   var lastIdeal = -1;
+  var aim = CricketField.batStance;
+  var through = Vec2.zero;
+  BattingPlan? plan;
 
   return (state, tick) {
+    if (state.phase != CricketPhase.delivery) {
+      // Back to the stance between balls, which is also what a person's thumb
+      // does when it stops moving.
+      return CricketInput(
+        x: CricketField.batStance.x,
+        y: CricketField.batStance.y,
+      );
+    }
+
     final ball = state.ball;
-    if (state.phase != CricketPhase.delivery) return CricketInput.idle;
 
     // Re-plan once per delivery.
     if (ball.idealContactTick != lastIdeal) {
       lastIdeal = ball.idealContactTick;
-      plannedTick =
-          ball.idealContactTick + rng.nextInt(spread * 2 + 1) - spread;
-      final read = rng.nextRange(-(60 - 45 * s), 60 - 45 * s);
-      final lateral = clampD(
-        (ball.position.x + read - CricketField.pitchCentreX) / 70,
-        -1,
+
+      // A good ball is harder to read and harder to time, for a proxy exactly
+      // as for the bot. Without this the yardstick could not tell a jaffa from
+      // a long hop, and the whole bowling half of the balance table flattened.
+      final difficulty = CricketField.deliveryDifficulty(
+        ball.pitchY,
+        ball.position.x + ball.velocity.x *
+            ((CricketField.batPlaneY - ball.position.y) / ball.velocity.y),
+      );
+      final spread = (baseSpread * (0.55 + 1.15 * difficulty)).round();
+      final readError = baseReadError * (1.0 + 0.6 * difficulty);
+
+      final misread = rng.nextRange(-readError, readError);
+      final aimX = clampD(
+        (ball.position.x + misread - CricketField.pitchCentreX) /
+                CricketField.batReachX *
+                0.5 +
+            0.5,
+        0,
         1,
       );
-      // Aim somewhere. The first version of this always hit straight down the
-      // ground, which put every shot into mid-off, mid-on and the bowler and
-      // made the balance table a measurement of one fielding position rather
-      // than of the game. A better player looks for a gap; a worse one swings
-      // where the ball happened to be.
-      final spray = rng.nextRange(-1.0, 1.0);
-      final aimLateral = clampD(lateral * (1 - 0.7 * s) + spray * (0.35 + 0.55 * s), -1, 1);
-      plannedX = (aimLateral + 1) / 2;
-      // A little squarer as skill rises, which is where the gaps are.
-      plannedY = clampD(0.5 - (0.5 - 0.22 * rng.nextDouble() * s), 0, 1);
+
+      final shortness = clampD(
+        (CricketField.fullestLength - ball.pitchY) /
+            (CricketField.fullestLength - CricketField.shortestLength),
+        0,
+        1,
+      );
+
       // Aggression is deliberately *not* tied to skill.
       //
       // It was, and it inverted the whole balance table: a "better" proxy swung
       // harder, went aerial more, and holed out more, so higher skill scored
       // fewer runs. Choosing to slog is a decision available to any player at
-      // any standard. What skill actually buys is timing and placement, which
-      // are the two dials above.
-      plannedPower = clampD(0.50 + rng.nextRange(-0.18, 0.18), 0, 1);
+      // any standard. What skill buys is timing and reading the line, which are
+      // the two dials above.
+      // Skewed upward rather than symmetric, so the proxy sometimes actually
+      // goes after one. A yardstick that never plays a big shot cannot measure
+      // whether big shots are worth playing.
+      final intent = clampD(0.50 + rng.nextRange(-0.26, 0.42), 0.05, 1);
+
+      // Height is executed, not just chosen.
+      //
+      // Skill buys accuracy, never aggression — that lesson is written twice
+      // in this file already. But *where the blade ends up vertically* is
+      // accuracy, and leaving it noiseless made a weak player get under the
+      // ball exactly as well as a strong one. Since getting under it is what
+      // lofts the ball, a weak player was lofting just as often and simply
+      // holing out more: better batting produced more dismissals, and runs
+      // stopped rising with skill between adjacent levels.
+      final heightSlip = rng.nextRange(-1, 1) * 0.24 * (1 - s);
+      aim = Vec2(
+        aimX,
+        clampD(0.90 - 0.34 * shortness + 0.34 * intent + heightSlip, 0, 1),
+      );
+      through = Vec2(
+        rng.nextRange(-0.26, 0.26) * (0.55 + 0.45 * intent),
+        -(0.14 + 0.34 * intent),
+      );
+      plan = BattingPlan.sweep(
+        contactTick: ball.idealContactTick,
+        aim: aim,
+        through: through,
+        intent: intent,
+        timingError: rng.nextInt(spread * 2 + 1) - spread,
+      );
     }
 
-    return CricketInput(
-      action: tick >= plannedTick,
-      x: plannedX,
-      y: plannedY,
-      power: plannedPower,
-    );
+    // The same sweep the bot plays, driven through the input channels rather
+    // than handed to the simulation. That matters: a proxy that set the bat
+    // position directly would be measuring a game nobody can play, and would
+    // skip both the speed cap and the quantisation the real path goes through.
+    final live = plan;
+    if (live == null) {
+      return CricketInput(
+        x: CricketField.batStance.x,
+        y: CricketField.batStance.y,
+      );
+    }
+    final target = live.targetAt(tick);
+    return CricketInput(x: target.x, y: target.y);
   };
 }
 
@@ -247,7 +304,19 @@ CricketInput Function(CricketState, int) proxyBowler({
       action: true,
       x: clampD(0.5 + rng.nextRange(-0.32, 0.32) * slop, 0, 1),
       y: clampD(0.6 + rng.nextRange(-0.35, 0.35) * slop, 0, 1),
-      power: rng.chance(0.25 + 0.3 * s) ? 0.62 : 0.12,
+      // What a skilled bowler picks, and it is not what it used to be.
+      //
+      // This was "a better bowler bowls more yorkers", which was right when
+      // batting was a timing window — a yorker was hard because it arrived at
+      // an awkward moment. Against a bat you *place*, a yorker is the easiest
+      // ball on the card: it barely deviates and it always arrives low, so it
+      // is trivially covered. Measured, the good bowler took fewer wickets
+      // than the wild one. Skill now buys movement off the pitch, which is the
+      // one thing a placed bat cannot answer, with the yorker kept as a
+      // variation rather than as the reward.
+      power: rng.chance(0.18 + 0.52 * s)
+          ? 0.37 // spin: the big turner
+          : (rng.chance(0.12 + 0.20 * s) ? 0.62 : 0.12),
     );
   };
 }

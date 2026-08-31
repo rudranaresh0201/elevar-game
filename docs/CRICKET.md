@@ -321,3 +321,89 @@ a view nobody finds until a player does.
   mode-select screen offers no choice. This is the reason that field is a set.
 - **Run-outs, LBW, wides, extras.** Deliberately absent. Bowled and caught are
   the two dismissals everybody understands without a rulebook.
+
+
+---
+
+## 9. The rebuild: from a timing window to a bat you hold
+
+Everything above describes the game as first built, where batting was a
+**swing**: you tapped, and a timing window graded how close to the ideal tick
+you were. That version worked, and watching somebody play it made the problem
+obvious — it did not look interactive. You picked a shot from three buttons,
+swiped a direction, and waited to be told how you had done.
+
+It is now a **place**. The blade is a rectangle you hold somewhere in the
+`(across the crease, height off the ground)` plane, and a delivery is struck if
+the ball happens to pass through it.
+
+### 9.1 What that changes
+
+| | before | after |
+|---|---|---|
+| input | tap, plus a swipe direction, plus a shot button | drag the bat, continuously |
+| contact | a ±22-tick window, graded | the ball is in the blade's way, or it is not |
+| power | a slider derived from swipe length | how fast the blade was actually moving |
+| direction | chosen from the swipe | where on the blade it was met, plus the blade's own velocity |
+| loft | a power threshold | whether you got *under* the ball |
+
+Three things fall out for free, and none of them is coded anywhere:
+
+- **A player who flicks their thumb through the line hits it further than one
+  who parks it there.** Nobody has to be taught that.
+- **There is no window to be early or late for.** Being beaten and being bowled
+  are the same event, which is also true of cricket.
+- **You can change your mind late, and it costs you.** The blade is speed-capped
+  at 380 units/s, so a correction made after the ball pitches may not arrive.
+
+The old code carried a long apology about the window being one-sided — the
+crossing happened on exactly `idealContactTick`, so resolution had to be
+deferred and the whole thing was delicate. There is nothing to defer now:
+contact resolves *on* the crossing, with both the ball and the blade
+interpolated to the exact instant between ticks that the two met.
+
+### 9.2 Four things came out backwards, again
+
+Same discipline as §5. All four were found by running `tool/diagnose.dart`, not
+by reading code.
+
+**An accurate bowler was easier to face than a wild one.** A bat you hold on a
+line is beaten by exactly one thing: the ball not staying on the line. Accuracy
+that only bought a *tighter line* bought a line that was easier to cover, and
+the measured win rate rose with bot difficulty. Fixed in three places —
+`maxDeviation` up from 145 to 200, `batHalfWidth` down from 38 to 30, and
+accuracy now buying **movement off the pitch** rather than repetition.
+
+**The bat was too fast for deviation to matter.** At 520 units/s the blade
+crossed the whole crease in half a second, so there were still 100–150 units of
+correction available after the ball pitched and every ball was correctable. 300
+fixed the ladder and felt like lag; 380 is the measured compromise and is the
+first number to retune against real thumbs.
+
+**A yorker became the easiest ball on the card.** It was hard in the old model
+because it was hard to *time*. It barely deviates and always arrives low, so
+against a placed bat it is trivially covered — and a scripted bowler whose skill
+bought more yorkers took *fewer* wickets. Skill now buys spin; the yorker is the
+quickest ball instead, so the difficulty in it is how little time there is to
+get the blade down.
+
+**Better batting produced more dismissals.** The blade arrived at almost exactly
+the ball's height on every shot, so nothing was ever got under — across three
+hundred innings the game contained **no sixes at all** — while a stronger player
+simply connected more often and holed out more. Getting under the ball is now a
+decision with a cost, and how well you execute it is a skill: a weak player
+lofts by accident, a strong one on purpose.
+
+### 9.3 The measured ladder afterwards
+
+`dart run tool/diagnose.dart`, win rate for the human:
+
+| bot | skill 0.3 | 0.6 | 0.9 |
+|---|---|---|---|
+| easy | 63% | 67% | 83% |
+| medium | 58% | 55% | 61% |
+| hard | 37% | 36% | 51% |
+
+Monotonic down every column. Scores land at 9–15 off twelve balls, 6–10% of
+balls are fours and 3–8% are sixes, and a match runs about eighty seconds.
+**Scripted opponent, not people — retune before launch.**

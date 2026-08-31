@@ -4,15 +4,24 @@ A casual game hub. Games are played entirely **on one device** — two humans
 sharing a screen, or one human against a bot. The app stays online for identity,
 a single cross-game points currency, and leaderboards.
 
-**Three games are built and playable, fully offline:** ping pong, car racing and
-cricket. Points are banked in a real on-device ledger and queued for a server
-that does not exist yet.
+**Four games are built and playable, fully offline:** soccer, cricket, car
+racing and ping pong. Points are banked in a real on-device ledger and queued
+for a server that does not exist yet.
+
+The app also has a **player profile** and a **leaderboard**. The board is fed by
+a webhook whose URL is compiled in at build time; with no URL it says so
+plainly and shows the player their own totals instead of an empty list.
 
 - [`docs/PLAN.md`](docs/PLAN.md) — the full end-to-end plan
+- [`docs/SOCCER.md`](docs/SOCCER.md) — the soccer build, and why the input
+  encoding had to be rebuilt
 - [`docs/RACING.md`](docs/RACING.md) — how the racing game works, and the two
   things that had to be measured rather than reasoned about
-- [`docs/CRICKET.md`](docs/CRICKET.md) — the cricket build, and the seven things
-  that came out backwards until they were measured
+- [`docs/CRICKET.md`](docs/CRICKET.md) — the cricket build, the seven things
+  that came out backwards, and the §9 rebuild that replaced the timing window
+  with a bat you hold
+- [`docs/LEADERBOARD.md`](docs/LEADERBOARD.md) — the webhook contract, and what
+  the server has to do before the numbers on it can be trusted
 - [`docs/DEPLOY.md`](docs/DEPLOY.md) — getting a playable link out: the web
   build, the droplet, and what the browser cannot do
 
@@ -24,18 +33,19 @@ that does not exist yet.
 app/                    the Flutter application
   lib/games/            ⭐ the game plugin contract + registry
   lib/data/             ⭐ the points ledger, per-game stats, sync outbox
+  lib/screens/          ⭐ the shell, the hub, the board, the profile
 packages/
   game_core/            ⭐ PURE DART — deterministic engine primitives
   pingpong_sim/         ⭐ PURE DART — the ping pong rules and physics
   racing_sim/           ⭐ PURE DART — the racing rules, track and physics
   cricket_sim/          ⭐ PURE DART — the cricket rules, fielding and bot
+  soccer_sim/           ⭐ PURE DART — the table-soccer rules, physics and bot
   game_pingpong/        Flame renderer + touch layer
   game_racing/          Flame renderer + the four-button control bands
-  game_cricket/         Flame renderer + the one-gesture batting and bowling pads
+  game_cricket/         Flame renderer + the crease pad and the blade
+  game_soccer/          Flame renderer + the slingshot band
   design_system/        colours, type, chunky controls
-docs/PLAN.md            the end-to-end plan
-docs/RACING.md          the racing build notes
-docs/CRICKET.md         the cricket build notes
+docs/*.md               the plan, and one build note per game
 ```
 
 **Adding a game touches two files.** An `ElevarGame` implementation and a line
@@ -109,15 +119,17 @@ cd packages/game_core    && dart test    # 24
 cd packages/pingpong_sim && dart test    # 28
 cd packages/racing_sim   && dart test    # 44
 cd packages/cricket_sim  && dart test    # 27
+cd packages/soccer_sim   && dart test    # 26
 
 # widget and golden tests
 cd packages/game_pingpong && flutter test  #  7
 cd packages/game_racing   && flutter test  # 17
-cd packages/game_cricket  && flutter test  # 15
-cd app                    && flutter test  # 42
+cd packages/game_cricket  && flutter test  # 17
+cd packages/game_soccer   && flutter test  #  7
+cd app                    && flutter test  # 66
 ```
 
-204 tests, all green.
+263 tests, all green.
 
 ### What the tests are actually for
 
@@ -148,7 +160,19 @@ cd app                    && flutter test  # 42
   verification again, plus the scoring rule that was inverted for a day:
   [`docs/CRICKET.md`](docs/CRICKET.md) §4.1.
 - **`packages/cricket_sim/test/balance_test.dart`** — the ladder is monotonic in
-  both directions and every innings terminates.
+  both directions and every innings terminates. Sample sizes are large on
+  purpose: a two-over innings is noisy enough that a 30-match monotonicity
+  assertion fails on chance while the slope underneath it is clean.
+- **`packages/soccer_sim/test/simulation_test.dart`** — determinism, replay
+  verification, and the physics bounds: nothing tunnels a touchline at the
+  speed cap, a ball in the mouth is a goal and a ball beside it is not, and a
+  counter never leaves through a goal.
+- **`packages/game_soccer/test/soccer_view_test.dart`** — a real thumb on the
+  real pitch. Includes the fast-flick regression: down, drag and up inside two
+  frames still takes the shot.
+- **`app/test/leaderboard_test.dart`** — the webhook parser against the four
+  response shapes an automation is likely to emit, and the profile store
+  against real SQL.
 - **`packages/game_cricket/test/cricket_view_test.dart`** — a whole match played
   through the real pads with real taps, then replayed and checked to the run.
   Also asserts the view is a perspective one: the pitch has to be wider at the
@@ -165,6 +189,8 @@ cd app                    && flutter test  # 42
 
 ```bash
 cd packages/pingpong_sim && dart run tool/balance.dart
+cd packages/soccer_sim   && dart run tool/balance.dart
+cd packages/cricket_sim  && dart run tool/diagnose.dart
 ```
 
 Prints win rates for a scripted human of varying skill against each difficulty,

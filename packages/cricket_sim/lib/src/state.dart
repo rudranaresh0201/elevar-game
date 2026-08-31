@@ -70,10 +70,17 @@ enum DeliveryKind {
 ///
 /// | channel | batting | bowling |
 /// |---|---|---|
-/// | `action` | swing now | release now |
-/// | `x` | shot direction, x | aim: line across the pitch |
-/// | `y` | shot direction, y | aim: length down the pitch |
-/// | `power` | how hard, and therefore how high | delivery kind |
+/// | `action` | unused | release now |
+/// | `x` | bat position across the crease | aim: line across the pitch |
+/// | `y` | bat height, `0` up and `1` on the deck | aim: length down the pitch |
+/// | `power` | unused | delivery kind |
+///
+/// Batting used to spend all four: a swing trigger, a shot direction and a
+/// power. It now spends two, and they are the two a thumb already produces —
+/// because the bat is a thing you *hold somewhere* rather than a button you
+/// press. How hard the ball goes is not a channel at all any more; it is how
+/// fast the bat happened to be moving, which the simulation measures for
+/// itself.
 class CricketInput {
   const CricketInput({
     this.action = false,
@@ -145,8 +152,18 @@ class CricketInput {
     return DeliveryKind.bouncer;
   }
 
+  /// Where the batter wants the blade, as a normalised point.
+  ///
+  /// `x` runs leg to off across the crease and `y` runs from bat-up to
+  /// bat-down, so a thumb dragged down the glass lowers the bat.
+  Vec2 get batTarget => Vec2(clampD(x, 0, 1), clampD(y, 0, 1));
+
   /// Channels consumed per human. One human is acting at any moment, so this
   /// is the whole match's channel count.
+  ///
+  /// Still four, though batting now only uses two of them. Bowling needs all
+  /// four, and a format that changed width depending on who was acting would
+  /// make the replay unreadable without first replaying it.
   static const int channelCount = 4;
 }
 
@@ -166,6 +183,15 @@ class BallState {
   Vec2 velocity;
 
   double height = 0;
+
+  /// Height at the end of the previous tick.
+  ///
+  /// Needed for exactly one thing, and it is not rendering: finding the ball's
+  /// height at the instant it crosses the bat's plane, which falls between two
+  /// ticks. Interpolating between this and [height] is what makes the contact
+  /// test exact rather than "whichever tick we happened to notice on".
+  double previousHeight = 0;
+
   double verticalSpeed = 0;
 
   /// Set once the delivery has pitched, after which the deviation applies.
@@ -179,14 +205,22 @@ class BallState {
 
   bool struck = false;
 
-  /// Whether the batter has already committed to a swing this delivery. One
-  /// swing per ball — a player who could keep swinging would always connect.
+  /// True once the bat has actually met this ball.
+  ///
+  /// It used to mean "the player has committed to their one swing". There is
+  /// no swing to commit to now: the bat is somewhere, continuously, and this
+  /// records whether it turned out to be somewhere useful.
   bool swung = false;
 
-  /// The tick a perfectly timed bat would meet this ball.
+  /// The tick a bat placed on the ball's line would meet it.
+  ///
+  /// Nothing is resolved by this any more — contact is decided by where the
+  /// bat actually is when the ball crosses its plane. It survives because the
+  /// bot and the scripted proxy both need something to time a swing against,
+  /// and because the renderer counts down to it.
   int idealContactTick = 0;
 
-  /// The tick the swing actually happened on, or -1.
+  /// The tick the bat actually met the ball on, or -1 for a play and miss.
   int swingTick = -1;
 
   /// Where the ball was as it passed the bat, and how fast.
@@ -205,6 +239,39 @@ class BallState {
   bool get airborne => height > 0.5;
 
   double get speed => velocity.length;
+}
+
+/// The blade, as a rectangle the player moves.
+///
+/// Lives in the `(across the pitch, height off the ground)` plane at
+/// [CricketField.batPlaneY]. It is not a body in the top-down world — nothing
+/// else on the field can collide with it — which is why it gets its own small
+/// class rather than joining the fielders.
+class BatState {
+  BatState({required this.position, required this.halfExtents})
+      : previousPosition = position,
+        velocity = Vec2.zero;
+
+  /// `x` is across the pitch in field units; `y` is height off the ground.
+  Vec2 position;
+
+  /// Position at the end of the previous tick, so the renderer can interpolate
+  /// and so the contact test can find where the bat was mid-tick.
+  Vec2 previousPosition;
+
+  /// Units per second, measured over the last tick. This is the number that
+  /// decides how hard the ball leaves, so it is simulation state rather than a
+  /// rendering convenience.
+  Vec2 velocity;
+
+  final Vec2 halfExtents;
+
+  double get speed => velocity.length;
+
+  /// True when the bat covers a ball at [ballX], [ballHeight].
+  bool covers(double ballX, double ballHeight, double ballRadius) =>
+      (ballX - position.x).abs() <= halfExtents.x + ballRadius &&
+      (ballHeight - position.y).abs() <= halfExtents.y + ballRadius;
 }
 
 /// One team's innings.
@@ -297,6 +364,7 @@ class CricketState {
   CricketState({
     required this.first,
     required this.ball,
+    required this.bat,
     required this.fielding,
   });
 
@@ -305,6 +373,9 @@ class CricketState {
   InningsState? second;
 
   BallState ball;
+
+  /// The blade, wherever the batter has it.
+  BatState bat;
 
   /// The ten players in the field, in the order the setting lists them.
   final List<Fielder> fielding;

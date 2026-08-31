@@ -9,7 +9,16 @@ import 'format.dart';
 
 /// What EP is for, and what this device has earned so far.
 class RewardsScreen extends StatefulWidget {
-  const RewardsScreen({super.key});
+  const RewardsScreen({this.embedded = false, super.key});
+
+  /// True when this is a tab in [ElevarShell] rather than a pushed route.
+  ///
+  /// The only difference is the back arrow and the [Scaffold] around it. A
+  /// screen that is sometimes a tab and sometimes a route is worth one flag —
+  /// the alternative is two copies of a reward catalogue that must be kept in
+  /// step, which is exactly the sort of duplication that goes stale the first
+  /// time a price changes.
+  final bool embedded;
 
   @override
   State<RewardsScreen> createState() => _RewardsScreenState();
@@ -47,19 +56,23 @@ class _RewardsScreenState extends State<RewardsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
+    final page = SafeArea(
+      bottom: !widget.embedded,
+      child: ListView(
+          padding: EdgeInsets.fromLTRB(20, widget.embedded ? 14 : 10, 20, 28),
           children: <Widget>[
             Row(
               children: <Widget>[
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.arrow_back_rounded),
-                  color: ElevarColors.white,
+                if (!widget.embedded)
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: const Icon(Icons.arrow_back_rounded),
+                    color: ElevarColors.white,
+                  ),
+                Text(
+                  'REWARDS',
+                  style: ElevarType.display(widget.embedded ? 30 : 24),
                 ),
-                Text('REWARDS', style: ElevarType.display(24)),
               ],
             ),
             const SizedBox(height: 14),
@@ -121,8 +134,9 @@ class _RewardsScreenState extends State<RewardsScreen> {
             _HowItWorks(),
           ],
         ),
-      ),
     );
+
+    return widget.embedded ? page : Scaffold(body: page);
   }
 }
 

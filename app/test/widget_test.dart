@@ -7,7 +7,10 @@ import 'package:game_core/game_core.dart';
 
 import 'package:elevar_play/games/registry.dart';
 
+import 'package:elevar_play/data/profile_repository.dart';
+
 import 'support/fake_points_repository.dart';
+import 'support/fake_profile_repository.dart';
 
 GameResult result({
   required GameMode mode,
@@ -43,18 +46,36 @@ Future<void> pumpApp(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+
+/// Scrolls a hub tile into view, then taps it.
+///
+/// The grid sits below the balance card and the featured tile, so on every
+/// phone size at least one game is off screen when the hub opens. `tap` on an
+/// off-screen widget does not scroll to it — it taps empty space — so this is
+/// the difference between a test that navigates and one that silently does
+/// nothing and then fails on the next line.
+Future<void> openGame(WidgetTester tester, String title) async {
+  final tile = find.text(title);
+  await tester.ensureVisible(tile);
+  await tester.pumpAndSettle();
+  await tester.tap(tile);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   group('app shell', () {
     setUp(() {
       // The hub reads the ledger on build, and a widget test process has no
       // platform channels for SQLite to open a database over.
       pointsRepository = FakePointsRepository(balanceValue: 140, pending: 2);
+      profileRepository = FakeProfileRepository();
     });
 
     testWidgets('opens on the hub with ping pong playable', (tester) async {
       await pumpApp(tester);
 
       expect(find.text('ELEVAR'), findsOneWidget);
+      expect(find.text('Test Player'), findsOneWidget);
       expect(find.text('PING\nPONG'), findsOneWidget);
       expect(find.text('CAR\nRACING'), findsOneWidget);
       // Balance and unsynced count both come off the ledger.
@@ -77,8 +98,7 @@ void main() {
         (tester) async {
       await pumpApp(tester);
 
-      await tester.tap(find.text('CAR\nRACING'));
-      await tester.pumpAndSettle();
+      await openGame(tester, 'CAR\nRACING');
 
       expect(find.text('CAR RACING'), findsOneWidget);
       expect(find.text('START RACE'), findsOneWidget);
@@ -90,8 +110,7 @@ void main() {
 
     testWidgets('racing two-player mode hides bot difficulty', (tester) async {
       await pumpApp(tester);
-      await tester.tap(find.text('CAR\nRACING'));
-      await tester.pumpAndSettle();
+      await openGame(tester, 'CAR\nRACING');
 
       await tester.tap(find.text('2 PLAYERS'));
       await tester.pumpAndSettle();
@@ -104,7 +123,7 @@ void main() {
         (tester) async {
       await pumpApp(tester);
 
-      await tester.tap(find.text('SPEND YOUR EP'));
+      await tester.tap(find.text('SPEND EP'));
       await tester.pumpAndSettle();
 
       expect(find.text('REWARDS'), findsOneWidget);
@@ -118,8 +137,7 @@ void main() {
         (tester) async {
       await pumpApp(tester);
 
-      await tester.tap(find.text('PING\nPONG'));
-      await tester.pumpAndSettle();
+      await openGame(tester, 'PING\nPONG');
 
       expect(find.text('PING PONG'), findsOneWidget);
       expect(find.text('VS BOT'), findsOneWidget);
@@ -132,8 +150,7 @@ void main() {
 
     testWidgets('two-player mode hides bot difficulty', (tester) async {
       await pumpApp(tester);
-      await tester.tap(find.text('PING\nPONG'));
-      await tester.pumpAndSettle();
+      await openGame(tester, 'PING\nPONG');
 
       await tester.tap(find.text('2 PLAYERS'));
       await tester.pumpAndSettle();

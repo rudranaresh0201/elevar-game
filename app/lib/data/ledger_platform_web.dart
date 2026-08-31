@@ -1,6 +1,7 @@
 import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
 import 'points_repository.dart';
+import 'profile_repository.dart';
 
 /// The browser: run the same SQL against `sqlite3.wasm`, stored in IndexedDB.
 ///
@@ -19,5 +20,12 @@ void configureLedgerForPlatform() {
     databaseFactoryOverride: databaseFactoryFfiWeb,
     // No filesystem to join a path onto — this is a key in IndexedDB.
     pathOverride: 'elevar_points.db',
+  );
+  // The profile and the cached board ride the same engine. A player id that
+  // did not survive a refresh would put a new name on the leaderboard every
+  // time somebody opened the shared link.
+  profileRepository = SqliteProfileRepository(
+    databaseFactoryOverride: databaseFactoryFfiWeb,
+    pathOverride: 'elevar_social.db',
   );
 }

@@ -297,15 +297,26 @@ void main() {
     });
 
     test('skill rewards winning, runs and wickets', () {
+      // Averaged over twelve matches rather than read off one.
+      //
+      // A single innings is twelve balls, and twelve balls is a small enough
+      // sample that a weak player can out-score a strong one on a given seed —
+      // which is true of cricket and not a defect in the scoring formula. This
+      // assertion is about the formula, so it has to be asked a question the
+      // formula can answer.
       double skillOf({required double batting}) {
-        final simulation = simulateHeadless(
-          seed: 4242,
-          mode: GameMode.vsBot,
-          botDifficulty: BotDifficulty.medium,
-          striker: proxyBatter(skill: batting, seed: 3),
-          bowler: proxyBowler(skill: batting, seed: 4),
-        );
-        return simulation.normalizedSkill;
+        var total = 0.0;
+        const matches = 12;
+        for (var i = 0; i < matches; i++) {
+          total += simulateHeadless(
+            seed: 4242 + i * 97,
+            mode: GameMode.vsBot,
+            botDifficulty: BotDifficulty.medium,
+            striker: proxyBatter(skill: batting, seed: 3 + i),
+            bowler: proxyBowler(skill: batting, seed: 4 + i),
+          ).normalizedSkill;
+        }
+        return total / matches;
       }
 
       expect(skillOf(batting: 0.9), greaterThan(skillOf(batting: 0.2)));

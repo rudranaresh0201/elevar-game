@@ -10,7 +10,7 @@ class CricketConfig {
     this.rules = CricketRules.powerplay,
     this.fieldSetting = FieldSetting.standard,
     this.sessionToken,
-    this.assistedTiming = true,
+    this.battingAssist = true,
   });
 
   final GameMode mode;
@@ -24,13 +24,14 @@ class CricketConfig {
 
   final String? sessionToken;
 
-  /// Draws the timing bar and flashes it as the ball arrives.
+  /// Whether to show where the ball is heading across the crease.
   ///
-  /// On by default. Timing is the entire skill of batting and it is invisible
-  /// — a new player who mistimes three balls has no way of knowing whether
-  /// they were early or late, and "I don't know what I did wrong" is the
-  /// fastest way to lose someone in the first thirty seconds.
-  final bool assistedTiming;
+  /// It used to be a timing ring, because batting used to be a timing
+  /// window. With a bat you hold somewhere, the useful help is *where*,
+  /// not *when* — and it is deliberately drawn from the ball's line before
+  /// it pitches, so it never gives away the movement off the seam. An
+  /// assist that did would leave a bowler with nothing.
+  final bool battingAssist;
 
   bool get isTwoHuman => mode == GameMode.local2P;
 

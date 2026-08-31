@@ -151,48 +151,84 @@ void main() {
     });
   });
 
-  group('the pad actually plays a shot', () {
-    testWidgets('a swipe during the delivery registers a swing',
+  group('the pad actually moves the bat', () {
+    testWidgets('dragging across the pad moves the blade across the crease',
         (tester) async {
       final harness = CricketHarness(tester);
       await harness.pump(botConfig);
       expect(await harness.waitForDelivery(), isTrue);
 
-      expect(harness.state.ball.swung, isFalse);
+      final pad = tester.getCenter(find.byType(BatPad));
+      final before = harness.state.bat.position.x;
 
-      // A real drag on the pad: down, across, up.
-      final pad = tester.getCenter(find.byType(BattingPad));
-      final gesture = await tester.startGesture(pad);
-      await tester.pump(const Duration(milliseconds: 16));
-      await gesture.moveBy(const Offset(-40, -70));
-      await tester.pump(const Duration(milliseconds: 16));
+      // Hold the thumb well over to one side and let the blade travel. It is
+      // speed-capped, so this needs real frames rather than one pump.
+      final gesture = await tester.startGesture(pad + const Offset(-90, 0));
+      await harness.frames(30);
       await gesture.up();
-      await harness.frames(8);
 
-      expect(harness.state.ball.swung, isTrue,
-          reason: 'the swipe never reached the simulation');
+      expect(
+        harness.state.bat.position.x,
+        lessThan(before - 20),
+        reason: 'the thumb never reached the simulation',
+      );
     });
 
-    testWidgets('a tap is a straight push rather than nothing', (tester) async {
+    testWidgets('dragging down the pad lowers the blade', (tester) async {
       final harness = CricketHarness(tester);
       await harness.pump(botConfig);
       expect(await harness.waitForDelivery(), isTrue);
 
-      await tester.tap(find.byType(BattingPad));
-      await harness.frames(8);
+      final pad = tester.getCenter(find.byType(BatPad));
+      final gesture = await tester.startGesture(pad + const Offset(0, -60));
+      await harness.frames(20);
+      final high = harness.state.bat.position.y;
 
-      expect(harness.state.ball.swung, isTrue);
+      await gesture.moveTo(pad + const Offset(0, 60));
+      await harness.frames(20);
+      await gesture.up();
+
+      expect(harness.state.bat.position.y, lessThan(high),
+          reason: 'down the pad must be down toward the turf');
+    });
+
+    testWidgets('a swept blade is moving when it meets the ball',
+        (tester) async {
+      // The whole reason the control changed: power is not a slider any more,
+      // it is how fast the bat happens to be travelling. A blade that arrived
+      // and stopped would play every ball as a dead bat.
+      final harness = CricketHarness(tester);
+      await harness.pump(botConfig);
+      expect(await harness.waitForDelivery(), isTrue);
+
+      final pad = tester.getCenter(find.byType(BatPad));
+      final gesture = await tester.startGesture(pad + const Offset(-70, -40));
+      await harness.frames(10);
+
+      var fastest = 0.0;
+      for (var i = 0; i < 40; i++) {
+        await gesture.moveTo(
+          pad + Offset(-70 + i * 4.0, -40 + i * 2.0),
+        );
+        await tester.pump(const Duration(milliseconds: 16));
+        final speed = harness.state.bat.speed;
+        if (speed > fastest) fastest = speed;
+      }
+      await gesture.up();
+
+      expect(fastest, greaterThan(80),
+          reason: 'a thumb sweeping across the pad must move the blade');
     });
 
     testWidgets('the pad is inert between balls', (tester) async {
-      // Otherwise a jab at the screen spends the next delivery's shot before
-      // the bowler has even run in.
+      // The bat still exists between deliveries — it drifts back to its
+      // stance — but nothing a jab at the screen does should reach the match.
       final harness = CricketHarness(tester);
       await harness.pump(botConfig);
       await harness.frames(2);
       expect(harness.state.phase, CricketPhase.runUp);
 
-      await tester.tap(find.byType(BattingPad));
+      await tester.tap(find.byType(BatPad));
       await harness.frames(4);
 
       expect(harness.state.ball.swung, isFalse);
@@ -211,36 +247,48 @@ void main() {
       expect(harness.game.config.rules.ballsPerInnings, 12);
     });
 
-    testWidgets('the timing ring appears while the ball is arriving',
+    testWidgets('the assist says where the ball is heading', (tester) async {
+      final harness = CricketHarness(tester);
+      await harness.pump(botConfig);
+      expect(await harness.waitForDelivery(), isTrue);
+
+      var sawLine = false;
+      for (var i = 0; i < 200; i++) {
+        final line = harness.game.ballLineAcrossCrease;
+        if (line != null) {
+          expect(line, inInclusiveRange(0, 1));
+          sawLine = true;
+          break;
+        }
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(sawLine, isTrue,
+          reason: 'the player is never told where the ball is going');
+    });
+
+    testWidgets('the assist goes quiet once the ball has passed the bat',
         (tester) async {
       final harness = CricketHarness(tester);
       await harness.pump(botConfig);
       expect(await harness.waitForDelivery(), isTrue);
 
-      // Somewhere in the delivery the window opens.
-      var sawRing = false;
-      for (var i = 0; i < 200; i++) {
-        if (harness.game.inSwingWindow) {
-          sawRing = true;
-          break;
-        }
+      for (var i = 0; i < 400; i++) {
         await tester.pump(const Duration(milliseconds: 16));
+        if (harness.state.phase != CricketPhase.delivery) break;
       }
-      expect(sawRing, isTrue,
-          reason: 'the player is never told when to swing');
-      expect(harness.game.swingOffset, inInclusiveRange(-1, 1));
+      expect(harness.game.ballLineAcrossCrease, isNull);
     });
 
-    testWidgets('assisted timing can be turned off', (tester) async {
+    testWidgets('the batting assist can be turned off', (tester) async {
       final harness = CricketHarness(tester);
       await harness.pump(const CricketConfig(
         mode: GameMode.vsBot,
         botDifficulty: BotDifficulty.medium,
         seed: 4242,
-        assistedTiming: false,
+        battingAssist: false,
       ));
       await harness.frames(2);
-      expect(harness.game.config.assistedTiming, isFalse);
+      expect(harness.game.config.battingAssist, isFalse);
     });
   });
 
@@ -265,17 +313,23 @@ void main() {
       // You bat first and then bowl, so the pad swaps partway through — and
       // reading the role *before* waiting for the delivery leaves it stale,
       // because the innings can turn over during the wait. Then the tap looks
-      // for a BattingPad that is no longer mounted and throws.
+      // for a BatPad that is no longer mounted and throws.
+      var swept = 0;
       for (var frame = 0; frame < 9000 && harness.outcome == null; frame++) {
         await tester.pump(const Duration(milliseconds: 16));
 
-        final batting = find.byType(BattingPad);
+        final batting = find.byType(BatPad);
         final bowling = find.byType(BowlingPad);
 
         if (harness.state.phase == CricketPhase.delivery &&
-            !harness.state.ball.swung &&
             batting.evaluate().isNotEmpty) {
-          await tester.tap(batting);
+          // Tap around the pad, so the blade is somewhere different on every
+          // ball and actually moving when the ball arrives.
+          final pad = tester.getCenter(batting);
+          await tester.tapAt(
+            pad + Offset(((swept % 5) - 2) * 24.0, ((swept % 3) - 1) * 18.0),
+          );
+          swept++;
         } else if (harness.state.phase == CricketPhase.runUp &&
             bowling.evaluate().isNotEmpty) {
           await tester.tap(bowling);

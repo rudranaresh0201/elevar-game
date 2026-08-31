@@ -3,7 +3,10 @@ import 'package:elevar_play/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:elevar_play/data/profile_repository.dart';
+
 import 'support/fake_points_repository.dart';
+import 'support/fake_profile_repository.dart';
 
 /// Screens must fit the phones people actually own.
 ///
@@ -16,6 +19,22 @@ import 'support/fake_points_repository.dart';
 /// A Flutter overflow raises a `FlutterError` during layout, which fails the
 /// surrounding test on its own — so simply building every screen at each size
 /// is the assertion.
+
+/// Scrolls a hub tile into view, then taps it.
+///
+/// The grid sits below the balance card and the featured tile, so on every
+/// phone size at least one game is off screen when the hub opens. `tap` on an
+/// off-screen widget does not scroll to it — it taps empty space — so this is
+/// the difference between a test that navigates and one that silently does
+/// nothing and then fails on the next line.
+Future<void> openGame(WidgetTester tester, String title) async {
+  final tile = find.text(title);
+  await tester.ensureVisible(tile);
+  await tester.pumpAndSettle();
+  await tester.tap(tile);
+  await tester.pumpAndSettle();
+}
+
 void main() {
   /// The smallest Android phone still in circulation, a common mid-range
   /// device, and a big one.
@@ -44,6 +63,7 @@ void main() {
           pending: 17,
           streakDays: 31,
         );
+        profileRepository = FakeProfileRepository();
       });
 
       testWidgets('the hub lays out', (tester) async {
@@ -66,10 +86,38 @@ void main() {
         await tester.pumpAndSettle();
       });
 
+      testWidgets('the soccer mode select lays out', (tester) async {
+        await pumpAt(tester, entry.value);
+        await openGame(tester, 'SOCCER');
+        expect(find.text('KICK OFF'), findsOneWidget);
+
+        // Two players plus the longest match description is the tall case,
+        // and it is below the fold on a 320pt phone.
+        await tester.tap(find.text('2 PLAYERS'));
+        await tester.pumpAndSettle();
+        await tester.drag(find.text('OPPONENT'), const Offset(0, -400));
+        await tester.pumpAndSettle();
+      });
+
+      testWidgets('the leaderboard lays out', (tester) async {
+        await pumpAt(tester, entry.value);
+        await tester.tap(find.text('BOARD'));
+        await tester.pumpAndSettle();
+        expect(find.text('LEADERBOARD'), findsOneWidget);
+      });
+
+      testWidgets('the profile lays out', (tester) async {
+        await pumpAt(tester, entry.value);
+        await tester.tap(find.text('YOU'));
+        await tester.pumpAndSettle();
+        expect(find.text('YOUR PROFILE'), findsOneWidget);
+        await tester.drag(find.text('AVATAR'), const Offset(0, -300));
+        await tester.pumpAndSettle();
+      });
+
       testWidgets('the cricket mode select lays out', (tester) async {
         await pumpAt(tester, entry.value);
-        await tester.tap(find.text('CRICKET'));
-        await tester.pumpAndSettle();
+        await openGame(tester, 'CRICKET');
         expect(find.text('START MATCH'), findsOneWidget);
 
         // CHASE is the longest description on the screen and HARD adds a
@@ -83,8 +131,7 @@ void main() {
 
       testWidgets('the racing mode select lays out', (tester) async {
         await pumpAt(tester, entry.value);
-        await tester.tap(find.text('CAR\nRACING'));
-        await tester.pumpAndSettle();
+        await openGame(tester, 'CAR\nRACING');
         expect(find.text('START RACE'), findsOneWidget);
 
         // Two players is the wider layout: it adds a description line and
@@ -95,8 +142,7 @@ void main() {
 
       testWidgets('the ping pong mode select lays out', (tester) async {
         await pumpAt(tester, entry.value);
-        await tester.tap(find.text('PING\nPONG'));
-        await tester.pumpAndSettle();
+        await openGame(tester, 'PING\nPONG');
         expect(find.text('START MATCH'), findsOneWidget);
 
         await tester.tap(find.text('2 PLAYERS'));

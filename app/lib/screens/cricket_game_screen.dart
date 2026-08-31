@@ -62,7 +62,7 @@ class CricketGameScreen extends StatelessWidget {
                         botDifficulty: config.botDifficulty,
                         rules: config.rules,
                         fieldSetting: config.fieldSetting,
-                        assistedTiming: config.assistedTiming,
+                        battingAssist: config.battingAssist,
                         seed: result.seed + 1,
                       ),
                     ),

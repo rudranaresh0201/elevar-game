@@ -27,7 +27,7 @@ class _CricketModeSelectScreenState extends State<CricketModeSelectScreen> {
   BotDifficulty _difficulty = BotDifficulty.medium;
   CricketRules _rules = CricketRules.powerplay;
   FieldSetting _field = FieldSetting.standard;
-  bool _assistedTiming = true;
+  bool _battingAssist = true;
 
   void _start() {
     final config = CricketConfig(
@@ -35,7 +35,7 @@ class _CricketModeSelectScreenState extends State<CricketModeSelectScreen> {
       botDifficulty: _difficulty,
       rules: _rules,
       fieldSetting: _field,
-      assistedTiming: _assistedTiming,
+      battingAssist: _battingAssist,
       // Offline, the seed is drawn locally and the match submits as
       // unverified. Phase 2 replaces this with a server-issued session token
       // drawn from the pre-fetched pool.
@@ -162,8 +162,8 @@ class _CricketModeSelectScreenState extends State<CricketModeSelectScreen> {
                       ),
                       const SizedBox(height: 24),
                       _TimingToggle(
-                        value: _assistedTiming,
-                        onChanged: (v) => setState(() => _assistedTiming = v),
+                        value: _battingAssist,
+                        onChanged: (v) => setState(() => _battingAssist = v),
                       ),
                       const SizedBox(height: 16),
                     ],

@@ -77,3 +77,50 @@ abstract final class RacingColors {
 
   static const Color glass = Color(0xFF1B2733);
 }
+
+/// Table soccer, sampled from the reference art the same way the table and the
+/// circuit were.
+///
+/// The pitch is two greens rather than one. A single flat green over a
+/// 1000 x 1800 rectangle reads as a bug — there is nothing for the eye to
+/// measure the ball's travel against — and mown bands are what a real pitch
+/// gives you for free.
+abstract final class SoccerColors {
+  /// Everything outside the touchline. The reference art puts the pitch on a
+  /// flat sky blue rather than on black, and it is most of why the thing looks
+  /// like a toy rather than a simulator.
+  static const Color surround = Color(0xFF5BB4DC);
+  static const Color surroundDeep = Color(0xFF3F9BC4);
+
+  static const Color turf = Color(0xFF4EB537);
+  static const Color turfBand = Color(0xFF45A32F);
+
+  /// Line markings, and the one colour that is never anything else.
+  static const Color line = Color(0xFFFFFFFF);
+
+  /// The net behind each goal.
+  static const Color net = Color(0xFFBFD9E8);
+  static const Color netMesh = Color(0xFF8FB6CC);
+
+  /// The woodwork. Ball off the post is the best thing that happens in a
+  /// match, so it is worth being able to see which one it hit.
+  static const Color post = Color(0xFF1A1A1A);
+
+  /// The counters. P1 keeps the red the paddle and the car had, P2 the blue,
+  /// so a player's colour means the same thing in every game in the hub.
+  static const Color discP1 = ElevarColors.p1;
+  static const Color discP1Deep = ElevarColors.p1Deep;
+  static const Color discP2 = Color(0xFF29B6F0);
+  static const Color discP2Deep = Color(0xFF0E86BC);
+
+  /// The ball.
+  static const Color ball = Color(0xFFFFFFFF);
+  static const Color ballMark = Color(0xFF1A1A1A);
+
+  /// The aim band, from a gentle tap to a full-power strike. Power is the one
+  /// thing a player has to judge before they commit, so it is worth a colour
+  /// and not only a length.
+  static const Color powerLow = Color(0xFF27D6A2);
+  static const Color powerMid = Color(0xFFFFF200);
+  static const Color powerHigh = Color(0xFFFF2B2B);
+}

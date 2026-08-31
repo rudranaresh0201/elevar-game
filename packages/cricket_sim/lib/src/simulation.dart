@@ -51,6 +51,16 @@ class CricketSimulation {
           CricketField.bowlerCreaseY,
         ),
       ),
+      bat: BatState(
+        position: const Vec2(
+          CricketField.pitchCentreX,
+          CricketField.batRestHeight,
+        ),
+        halfExtents: const Vec2(
+          CricketField.batHalfWidth,
+          CricketField.batHalfHeight,
+        ),
+      ),
       fielding: <Fielder>[
         for (final position in fieldSetting.positions)
           Fielder(name: position.name, home: position.home),
@@ -151,6 +161,13 @@ class CricketSimulation {
     if (input.striker != null) _heldStriker = input.striker!;
     if (input.bowler != null) _heldBowler = input.bowler!;
 
+    // Before the phase, and in every phase. The bat is a body now: it has a
+    // position at all times and a velocity measured over the last tick, and
+    // both have to be true on the tick the ball happens to cross it. Moving it
+    // only during the delivery would leave it teleporting into place on the
+    // first tick of every ball, arriving at whatever speed the jump implied.
+    _moveBat(dt);
+
     switch (state.phase) {
       case CricketPhase.runUp:
         state.phaseTicks--;
@@ -185,6 +202,48 @@ class CricketSimulation {
         state.phase != CricketPhase.complete) {
       _endInnings();
     }
+  }
+
+  // --- the bat -------------------------------------------------------------
+
+  /// Moves the blade toward wherever it is wanted, at up to
+  /// [CricketField.batMaxSpeed].
+  ///
+  /// Structurally the same as ping pong's paddle, and for the same reason: the
+  /// speed cap is what stops a tampered client putting the bat on the ball at
+  /// the last instant, and it is also what makes timing a skill rather than a
+  /// formality.
+  void _moveBat(double dt) {
+    final bat = state.bat;
+    final target = _batTarget();
+
+    final desired = Vec2(
+      CricketField.batXFor(target.x),
+      CricketField.batHeightFor(target.y),
+    );
+
+    final delta = desired - bat.position;
+    final maxStep = CricketField.batMaxSpeed * dt;
+    final next = delta.lengthSquared <= maxStep * maxStep
+        ? desired
+        : bat.position + delta.withLength(maxStep);
+
+    bat.previousPosition = bat.position;
+    bat.velocity = (next - bat.position) / dt;
+    bat.position = next;
+  }
+
+  /// Where the blade is wanted this tick, normalised.
+  Vec2 _batTarget() {
+    if (state.phase == CricketPhase.betweenBalls ||
+        state.phase == CricketPhase.inningsBreak ||
+        state.phase == CricketPhase.complete) {
+      return CricketField.batStance;
+    }
+    if (_battingIsHuman) return _heldStriker.batTarget;
+    final plan = _plan;
+    if (plan == null) return CricketField.batStance;
+    return plan.targetAt(_tick);
   }
 
   // --- bowling -------------------------------------------------------------
@@ -224,7 +283,11 @@ class CricketSimulation {
     final speed = switch (kind) {
       DeliveryKind.pace => CricketField.fastestDelivery,
       DeliveryKind.spin => CricketField.slowestDelivery,
-      DeliveryKind.yorker => CricketField.fastestDelivery * 0.96,
+      // The quickest ball on the card, now that it is no longer the hardest to
+      // time. A yorker barely deviates and always arrives low, so the only
+      // difficulty left in it is how little time there is to get the blade
+      // down — which means it has to actually be the fast one.
+      DeliveryKind.yorker => CricketField.fastestDelivery * 1.06,
       DeliveryKind.bouncer => CricketField.fastestDelivery * 0.90,
     };
 
@@ -269,29 +332,13 @@ class CricketSimulation {
       _plan = _bot!.planShot(
         ball: state.ball,
         required: _requiredRate(),
-        deliveryDifficulty: _deliveryDifficulty(pitchY, targetX),
+        deliveryDifficulty:
+            CricketField.deliveryDifficulty(pitchY, targetX),
       );
     }
   }
 
   bool get _battingIsHuman => isTwoHuman || humanRole == Role.batting;
-
-  /// How hard this delivery is to bat at, 0..1.
-  ///
-  /// Length is worth more than line, which is how bowling actually works: a
-  /// ball on a good length is awkward wherever it is, and a ball short and wide
-  /// is a gift however straight the seam was pointing.
-  double _deliveryDifficulty(double pitchY, double targetX) {
-    const goodLength = 790.0;
-    const lengthTolerance = 130.0;
-    final lengthQuality =
-        1 - clampD((pitchY - goodLength).abs() / lengthTolerance, 0, 1);
-
-    final lineQuality = 1 -
-        clampD((targetX - CricketField.pitchCentreX).abs() / 95, 0, 1);
-
-    return clampD(0.62 * lengthQuality + 0.38 * lineQuality, 0, 1);
-  }
 
   /// How stretched the chasing side is, 0..1. Zero in the first innings.
   double _pressure() {
@@ -317,18 +364,7 @@ class CricketSimulation {
   void _advanceDelivery(double dt) {
     final ball = state.ball;
     ball.previousPosition = ball.position;
-
-    // Register the swing. One per ball: a player who could keep swinging
-    // would eventually connect with everything.
-    if (!ball.swung) {
-      final swinging = _battingIsHuman
-          ? _heldStriker.action
-          : (_plan != null && _tick >= _plan!.swingTick);
-      if (swinging) {
-        ball.swung = true;
-        ball.swingTick = _tick;
-      }
-    }
+    ball.previousHeight = ball.height;
 
     ball.position += ball.velocity * dt;
 
@@ -354,121 +390,165 @@ class CricketSimulation {
 
     _integrateHeight(ball, dt);
 
-    // Freeze the ball as it passes the bat, but do not resolve the shot yet.
-    //
-    // Resolving on the crossing itself is the obvious thing to do and it is
-    // wrong: the crossing happens on exactly `idealContactTick`, so a swing
-    // one tick late could never be registered at all. The window was silently
-    // one-sided — a player could be early but never late — and every late
-    // swing became a play-and-miss, which made bowled far and away the most
-    // common dismissal. The ball is allowed to travel on to the keeper while
-    // the rest of the window runs out.
-    if (!ball.reachedBat && ball.position.y >= CricketField.contactY) {
-      ball
-        ..contactPosition = ball.position
-        ..contactVelocity = ball.velocity
-        ..contactHeight = ball.height;
-    }
-
-    if (ball.reachedBat &&
-        _tick >= ball.idealContactTick + CricketField.contactWindowTicks) {
-      _resolveContact();
+    if (!ball.reachedBat && ball.position.y >= CricketField.batPlaneY) {
+      _crossBatPlane();
     }
   }
 
-  /// Bat meets ball, or does not.
-  void _resolveContact() {
+  /// The moment the ball reaches the bat's plane.
+  ///
+  /// Resolved *on the crossing*, and exactly on it. The ball passes the plane
+  /// somewhere between two ticks, so both the ball and the bat are
+  /// interpolated to the crossing instant before anything is asked about
+  /// either. Testing at the end of the tick instead would let a fast ball be
+  /// judged against a bat that had already moved several units past where it
+  /// was when the two actually met — a discrepancy that grows with delivery
+  /// speed, which is to say it is worst against exactly the balls that are
+  /// hardest to hit.
+  void _crossBatPlane() {
     final ball = state.ball;
+    final bat = state.bat;
 
-    final timingError = ball.swung
-        ? (ball.swingTick - ball.idealContactTick).abs()
-        : CricketField.contactWindowTicks + 1;
+    final travelled = ball.position.y - ball.previousPosition.y;
+    // A ball that arrived on the plane without moving cannot be interpolated;
+    // treat it as crossing at the end of the tick.
+    final t = travelled.abs() < 1e-9
+        ? 1.0
+        : clampD(
+            (CricketField.batPlaneY - ball.previousPosition.y) / travelled,
+            0,
+            1,
+          );
 
-    if (timingError > CricketField.contactWindowTicks) {
+    final crossX =
+        ball.previousPosition.x + (ball.position.x - ball.previousPosition.x) * t;
+    final crossHeight =
+        ball.previousHeight + (ball.height - ball.previousHeight) * t;
+    final batAt =
+        bat.previousPosition + (bat.position - bat.previousPosition) * t;
+
+    ball
+      ..contactPosition = Vec2(crossX, CricketField.batPlaneY)
+      ..contactVelocity = ball.velocity
+      ..contactHeight = crossHeight;
+
+    final covered = (crossX - batAt.x).abs() <=
+            CricketField.batHalfWidth + CricketField.ballRadius &&
+        (crossHeight - batAt.y).abs() <=
+            CricketField.batHalfHeight + CricketField.ballRadius;
+
+    if (!covered) {
       _resolveMiss();
       return;
     }
 
-    // Timing is most of it, and deliberately generous: this is an arcade
-    // game, and a player who cannot make contact never learns anything else.
-    final timing = 1.0 -
-        timingError / CricketField.contactWindowTicks.toDouble();
+    ball
+      ..swung = true
+      ..swingTick = _tick;
+    _resolveContact(
+      contactAt: Vec2(crossX, CricketField.batPlaneY),
+      contactHeight: crossHeight,
+      batAt: batAt,
+      batVelocity: bat.velocity,
+    );
+  }
 
-    final direction = _battingIsHuman
-        ? _heldStriker.shotDirection
-        : _plan!.direction;
-    final intent = _battingIsHuman ? _heldStriker.power : _plan!.power;
+  /// Bat meets ball.
+  ///
+  /// Everything about the shot now comes out of the collision rather than out
+  /// of a menu. Three numbers do all of it:
+  ///
+  /// * **where on the blade**, across — decides which way the ball goes, and
+  ///   how well it was middled.
+  /// * **where on the blade**, vertically — the ball met below the blade's
+  ///   middle has been got *under*, and goes up.
+  /// * **how fast the blade was moving** — how far it goes.
+  ///
+  /// The old version took a direction and a power straight off two channels
+  /// and multiplied them by a timing score. It played fine and it was a menu:
+  /// the player chose an outcome and the simulation graded how close they were
+  /// to executing it. This one has no opinion about what shot was intended.
+  void _resolveContact({
+    required Vec2 contactAt,
+    required double contactHeight,
+    required Vec2 batAt,
+    required Vec2 batVelocity,
+  }) {
+    final ball = state.ball;
 
-    // Playing with the line. Where the ball crossed the bat decides which shot
-    // was the right one, so a wide ball wants to be cut and a straight one
-    // wants to be driven.
-    //
-    // The right shot is expressed as a **direction**, in the same normalised
-    // space the played shot is in. It used to be a bare ratio capped at one,
-    // compared against the x of a unit vector which can never exceed 0.707 for
-    // anything played down the ground — so a wide ball could not be aligned
-    // with no matter how well it was read, and a straight one aligned almost
-    // for free. Accurate bowling was therefore *punished*: against the hard
-    // bot, a bowler at skill 0.9 conceded 34 off twelve balls and a bowler at
-    // skill 0.3 conceded 22. The whole difficulty ladder inverted on this one
-    // line.
-    final contactAt = ball.contactPosition ?? ball.position;
-    final lineOffset = contactAt.x - CricketField.pitchCentreX;
-    final preferred =
-        Vec2(clampD(lineOffset / 70, -1, 1), -1).normalized.x;
-    final alignment =
-        1.0 - clampD((direction.x - preferred).abs() / 1.6, 0, 1);
+    // Where on the blade, in half-extents, so both are on the same -1..1 scale
+    // whatever the blade's dimensions are.
+    final offsetX = clampD(
+      (contactAt.x - batAt.x) / CricketField.batHalfWidth,
+      -1.4,
+      1.4,
+    );
+    final offsetHeight = clampD(
+      (contactHeight - batAt.y) / CricketField.batHalfHeight,
+      -1.4,
+      1.4,
+    );
 
-    final quality = clampD(0.72 * timing + 0.28 * alignment, 0, 1);
+    // Middled means near the middle of the blade, and nothing else. It is
+    // deliberately forgiving toward the edges — the reference for this hub is
+    // an arcade game, and a player who is beaten by their own thumb twice in a
+    // row does not play a third time.
+    final furthestOff =
+        offsetX.abs() > offsetHeight.abs() ? offsetX.abs() : offsetHeight.abs();
+    final quality = clampD(1.0 - 0.62 * furthestOff, 0.05, 1);
 
-    // The shot is played from where the ball met the bat, not from wherever it
-    // has rolled on to while the window ran down.
+    // How hard the blade was travelling, against a full-blooded swing.
+    final swing =
+        clampD(batVelocity.length / CricketField.batSwingReference, 0, 1.25);
+
     ball
       ..struck = true
       ..pitched = true
       ..position = contactAt
-      ..height = ball.contactHeight;
+      ..height = contactHeight;
 
-    var shot = direction;
-    // Intent has to matter across its whole range, not just at the top.
-    //
-    // This was `0.55 + 0.45 * intent`, which left a gentle push travelling at
-    // 628 units/s — far enough to beat the field to a single almost every time.
-    // Poking at everything therefore scored about a run a ball with no risk
-    // attached, and dominated hitting out completely: the *easy* bot outscored
-    // the hard one because it swung softer. A soft shot now has to be soft.
-    var speed = CricketField.maxHitSpeed *
-        (0.30 + 0.70 * quality) *
-        (0.30 + 0.70 * intent);
+    // Direction: where on the blade it was met, plus how fast the blade was
+    // crossing the line. A ball met on the outside edge with the bat coming
+    // across goes square; the same ball met dead centre with a straight bat
+    // goes down the ground.
+    final lateral = offsetX * CricketField.batOffsetInfluence +
+        batVelocity.x * CricketField.batVelocityInfluence;
+    var shot = Vec2(lateral, -1).normalized;
 
-    // Loft rises continuously with intent rather than switching on at a
-    // threshold. A cliff here makes the whole middle of the power range a trap:
-    // just under it every shot stays down and earns a single, just over it
-    // every shot is a catchable lob that lands on the ring, and hitting the
-    // ball harder is therefore *punished* until you can hit it out of the
-    // ground. Skill inverted in the balance table because of it.
-    final loftIntent = clampD((intent - 0.30) / 0.70, 0, 1);
+    var speed = clampD(
+      CricketField.maxHitSpeed *
+          (0.30 + 0.70 * quality) *
+          (0.26 + 0.74 * swing),
+      110,
+      CricketField.maxHitSpeed * 1.1,
+    );
+
+    // Getting under it. A positive vertical offset means the ball passed above
+    // the middle of the blade, which is what lofting a ball physically is.
+    final under = clampD(offsetHeight, 0, 1.2);
     var lift = CricketField.maxLoftSpeed *
-        loftIntent *
-        (0.40 + 0.60 * quality);
+        (0.10 + 0.90 * under) *
+        (0.25 + 0.75 * swing);
+    // And lifting the blade through the ball adds to it, which is the other
+    // half of how anybody actually hits a six.
+    lift += CricketField.maxLoftSpeed *
+        clampD(batVelocity.y / CricketField.batSwingReference, 0, 1) *
+        0.55;
 
     if (quality < 0.35) {
       // A mishit. The bat turns in the hand, the ball leaves at an angle
-      // nobody chose, and it goes up — which is what makes a top edge a
-      // catch rather than a boundary.
-      final leading = Vec2(
+      // nobody chose, and it goes up — which is what makes a top edge a catch
+      // rather than a boundary.
+      shot = Vec2(
         shot.x * 0.35 + ball.contactVelocity.normalized.x * 0.65,
         shot.y * 0.55,
       ).normalized;
-      shot = leading;
       speed *= 0.55;
       lift = math.max(lift, CricketField.maxLoftSpeed * 0.62);
-      _emit(CricketEventType.edged, at: ball.position);
+      _emit(CricketEventType.edged, at: contactAt);
     } else {
       _emit(
-        quality >= 0.70
-            ? CricketEventType.middled
-            : CricketEventType.edged,
+        quality >= 0.70 ? CricketEventType.middled : CricketEventType.edged,
         at: contactAt,
         value: (quality * 100).round(),
       );

@@ -42,7 +42,7 @@ Future<void> renderMatch(
   for (var i = 0; i < frames; i++) {
     await tester.pump(const Duration(milliseconds: 16));
     if (swing) {
-      final pad = find.byType(BattingPad);
+      final pad = find.byType(BatPad);
       if (pad.evaluate().isNotEmpty) {
         await tester.tap(pad);
         swing = false;
@@ -66,7 +66,7 @@ void main() {
     );
   });
 
-  testWidgets('mid-delivery, the timing ring up', (tester) async {
+  testWidgets('mid-delivery, the blade on the crease', (tester) async {
     await renderMatch(tester, config: config, frames: 130);
     await expectLater(
       find.byType(CricketView),
@@ -119,7 +119,7 @@ void main() {
     for (var frame = 0; frame < 6000; frame++) {
       if (game.pitchCamera.facing == 1) break;
       await tester.pump(const Duration(milliseconds: 16));
-      final pad = find.byType(BattingPad);
+      final pad = find.byType(BatPad);
       if (pad.evaluate().isNotEmpty &&
           game.simulation.state.phase == CricketPhase.delivery &&
           !game.simulation.state.ball.swung) {

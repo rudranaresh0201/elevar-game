@@ -1,4 +1,4 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:game_core/game_core.dart';
 
 /// What the hub needs to know about a game, and nothing more.
@@ -30,6 +30,13 @@ abstract class ElevarGame {
   /// The tile colour, and the accent through the game's own screens.
   Color get accent;
 
+  /// The mark on the tile.
+  ///
+  /// Part of the contract rather than a lookup table in the hub, for the same
+  /// reason [accent] is: the hub must not grow a branch per game. A default is
+  /// supplied so a reserved tile does not have to invent one.
+  IconData get glyph => Icons.sports_esports_rounded;
+
   /// Which of the two shared-device modes this game offers.
   Set<GameMode> get supportedModes;
 
@@ -49,6 +56,7 @@ class ComingSoonGame extends ElevarGame {
     required this.slug,
     required this.title,
     required this.accent,
+    this.glyph = Icons.lock_rounded,
   });
 
   @override
@@ -57,6 +65,8 @@ class ComingSoonGame extends ElevarGame {
   final String title;
   @override
   final Color accent;
+  @override
+  final IconData glyph;
 
   @override
   String get tagline => 'Coming soon.';

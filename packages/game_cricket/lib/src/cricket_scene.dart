@@ -402,6 +402,11 @@ class CricketScene extends Component {
 
     at(_bowlerY(state), () => _paintBowler(canvas, camera, state));
     at(CricketField.strikerY, () => _paintBatter(canvas, camera, state));
+    // Registered at the bat's own plane rather than the batter's, so it
+    // sorts in front of the person holding it and behind a ball that has
+    // not reached it yet. Getting this wrong draws the blade over a ball
+    // it has not hit.
+    at(CricketField.batPlaneY, () => _paintBlade(canvas, camera, state));
 
     final ballAt = _lerp(state.ball.previousPosition, state.ball.position);
     at(ballAt.y, () => _paintBall(canvas, camera, state, ballAt));
@@ -465,17 +470,87 @@ class CricketScene extends Component {
     );
   }
 
+  /// The blade, where the simulation actually has it.
+  ///
+  /// This is the single most important thing on the screen now that the bat is
+  /// a place rather than a swing animation. The pad under the player's thumb
+  /// draws where the thumb *is*; this draws where the bat has managed to get
+  /// to, which is not the same thing — the blade has a speed cap, and the gap
+  /// between the two is exactly the cost of changing your mind late. A player
+  /// who can see that gap learns to commit earlier. One who cannot just
+  /// wonders why they missed.
+  void _paintBlade(Canvas canvas, PitchCamera camera, CricketState state) {
+    final bat = state.bat;
+    final scale = camera.scaleAt(CricketField.batPlaneY);
+    final centre = camera.project(
+      bat.position.x,
+      CricketField.batPlaneY,
+      bat.position.y,
+    );
+
+    final halfWidth = CricketField.batHalfWidth * scale;
+    final halfHeight = CricketField.batHalfHeight * scale;
+    if (halfWidth < 2 || halfHeight < 2) return;
+
+    final blade = RRect.fromRectAndRadius(
+      Rect.fromCenter(
+        center: centre,
+        width: halfWidth * 2,
+        height: halfHeight * 2,
+      ),
+      Radius.circular(halfWidth * 0.28),
+    );
+
+    // A soft trail behind a moving blade, so a swing reads as a swing rather
+    // than as a rectangle that teleported. Purely decorative — it is drawn
+    // from the simulation's own velocity and feeds nothing back.
+    final speed = bat.speed;
+    if (speed > 40) {
+      final back = bat.previousPosition - bat.position;
+      canvas.drawRRect(
+        blade.shift(Offset(back.x * scale * 2.2, -back.y * scale * 2.2)),
+        Paint()..color = CricketColors.bat.withValues(alpha: 0.28),
+      );
+    }
+
+    canvas.drawRRect(blade, Paint()..color = CricketColors.bat);
+    canvas.drawRRect(
+      blade,
+      Paint()
+        ..color = ElevarColors.ink
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = (2.5 * scale).clamp(2.0, 6.0),
+    );
+
+    // The handle, up out of the top of the blade.
+    canvas.drawLine(
+      Offset(centre.dx, centre.dy - halfHeight),
+      Offset(centre.dx, centre.dy - halfHeight * 2.1),
+      Paint()
+        ..color = ElevarColors.ink
+        ..strokeWidth = (3.0 * scale).clamp(3.0, 9.0)
+        ..strokeCap = StrokeCap.round,
+    );
+  }
+
   void _paintBatter(Canvas canvas, PitchCamera camera, CricketState state) {
     final ball = state.ball;
 
-    // How far through the swing we are, taken straight off the tick the
-    // simulation recorded — no animation state of our own to drift out of
-    // sync with the thing that decides whether it connected.
-    double? swing;
-    if (ball.swingTick >= 0) {
-      final since = game.simulation.tick - ball.swingTick;
-      if (since >= 0 && since < 48) swing = (since / 48.0).clamp(0.0, 1.0);
-    }
+    // The batter no longer carries a bat.
+    //
+    // They used to, drawn with a swing animation keyed off the tick the
+    // simulation recorded. Now that the blade is a body the player moves, the
+    // figure holding a second one puts two bats on the screen at once — and
+    // the wrong one is the one that reads as the bat, because the drawn one is
+    // attached to a person and the real one is not. Arms only; the blade is
+    // [_paintBlade].
+    //
+    // The swing tick is still worth reading: it is what the ball's contact
+    // spark is timed off, and it comes from the simulation rather than from
+    // animation state of our own that could drift out of sync with the thing
+    // that decides whether it connected.
+    final struck = ball.swingTick >= 0 &&
+        game.simulation.tick - ball.swingTick < 48;
 
     _paintPerson(
       canvas,
@@ -488,7 +563,7 @@ class CricketScene extends Component {
       shirt: CricketColors.batterShirt,
       stride: 0.2,
       pads: true,
-      bat: swing ?? -1,
+      armsUp: struck,
       // Facing us when we are the ones bowling at them.
       mirrored: camera.facing == 1,
     );

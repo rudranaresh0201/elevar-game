@@ -117,25 +117,35 @@ class CricketGame extends FlameGame {
   int _boundaries = 0;
   int get boundaries => _boundaries;
 
-  /// True while the ball is close enough that a swing would connect.
+  /// Where the ball is heading across the crease, normalised to the bat's own
+  /// reach, or null when there is nothing on its way.
   ///
-  /// Drives the timing ring. Without something showing this, batting is a
-  /// guess — and a player who cannot tell whether they were early or late has
-  /// no way to get better, which is the difference between a game people come
-  /// back to and one they bounce off.
-  bool get inSwingWindow {
+  /// Projected from the ball's *current* line, which before it pitches is the
+  /// line it looks like it is on and after it pitches is the line it is
+  /// actually on. That is exactly the information a batter has, and it is why
+  /// a ball that deviates is still worth bowling: the marker moves at the
+  /// bounce, and by then the blade may not have time to follow it.
+  ///
+  /// Without something showing this, batting on a phone is a guess — the ball
+  /// is a few pixels wide at the bowler's end, and a player who cannot tell
+  /// where it is going has no way to get better.
+  double? get ballLineAcrossCrease {
     final state = simulation.state;
-    if (state.phase != CricketPhase.delivery) return false;
+    if (state.phase != CricketPhase.delivery) return null;
     final ball = state.ball;
-    final away = (ball.idealContactTick - simulation.tick).abs();
-    return away <= CricketField.contactWindowTicks;
-  }
+    if (ball.reachedBat) return null;
+    final vy = ball.velocity.y;
+    if (vy.abs() < 1e-6) return null;
 
-  /// -1 for far too early through to 1 for far too late, 0 on the money.
-  double get swingOffset {
-    final ball = simulation.state.ball;
-    final delta = simulation.tick - ball.idealContactTick;
-    return clampD(delta / CricketField.contactWindowTicks.toDouble(), -1, 1);
+    final remaining = CricketField.batPlaneY - ball.position.y;
+    if (remaining <= 0) return null;
+    final crossX = ball.position.x + ball.velocity.x * (remaining / vy);
+
+    return clampD(
+      (crossX - CricketField.pitchCentreX) / CricketField.batReachX * 0.5 + 0.5,
+      0,
+      1,
+    );
   }
 
   /// Which role the player on this device is performing right now.

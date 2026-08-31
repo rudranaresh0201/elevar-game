@@ -99,9 +99,12 @@ class _Band extends StatelessWidget {
                 border: Border.all(color: ElevarColors.ink, width: 3),
               ),
               child: batting
-                  ? BattingControls(
+                  ? BatPad(
                       enabled: armed,
-                      onSwing: game.setBattingInput,
+                      onMove: game.setBattingInput,
+                      ballLine: game.config.battingAssist
+                          ? game.ballLineAcrossCrease
+                          : null,
                     )
                   : BowlingPad(
                       enabled: armed,
@@ -175,19 +178,6 @@ class _Hud extends StatelessWidget {
                 right: 12,
                 child: _Timeline(timeline: innings.timeline, rules: rules),
               ),
-
-              // Just above the control band rather than out in the middle,
-              // where it sat squarely on top of the batter and hid the one
-              // thing the player is watching.
-              if (game.config.assistedTiming && game.inSwingWindow)
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: game.bandHeight + 10,
-                  child: Center(
-                    child: _TimingRing(offset: game.swingOffset),
-                  ),
-                ),
 
               if (game.bannerText != null)
                 Align(
@@ -357,61 +347,6 @@ class _Pip extends StatelessWidget {
           label,
           style: ElevarType.display(size * 0.6, color: ElevarColors.white),
         ),
-      ),
-    );
-  }
-}
-
-/// The timing ring: a bar that fills as the ball arrives, green in the middle.
-///
-/// Batting is entirely a matter of *when*, and without this that information
-/// is nowhere on screen. A player who mistimes three in a row and cannot tell
-/// whether they were early or late has been given nothing to improve on, which
-/// is the fastest way to lose somebody in their first thirty seconds.
-class _TimingRing extends StatelessWidget {
-  const _TimingRing({required this.offset});
-
-  /// -1 far too early, 0 perfect, 1 far too late.
-  final double offset;
-
-  @override
-  Widget build(BuildContext context) {
-    final colour = CricketColors.timingColour(offset);
-
-    return Container(
-      width: 190,
-      height: 26,
-      decoration: BoxDecoration(
-        color: ElevarColors.surface.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(13),
-        border: Border.all(color: ElevarColors.ink, width: 3),
-      ),
-      child: Stack(
-        children: <Widget>[
-          // The sweet spot.
-          Align(
-            alignment: Alignment.center,
-            child: Container(
-              width: 52,
-              decoration: BoxDecoration(
-                color: CricketColors.perfect.withValues(alpha: 0.30),
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-          ),
-          Align(
-            alignment: Alignment(offset, 0),
-            child: Container(
-              width: 14,
-              height: 14,
-              decoration: BoxDecoration(
-                color: colour,
-                shape: BoxShape.circle,
-                border: Border.all(color: ElevarColors.ink, width: 2),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

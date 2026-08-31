@@ -1,3 +1,5 @@
+import 'package:game_core/game_core.dart';
+
 /// Fixed dimensions and handling constants, in simulation units.
 ///
 /// As with the other two games, the simulation never sees pixels: it runs in a
@@ -68,12 +70,26 @@ abstract final class CricketField {
   /// roughly 0.76 s for the quickest ball and 1.18 s for the slowest. They came
   /// down from 980/620 when the pitch was shortened — at the old speeds the
   /// quick ball arrived in 0.43 s, which is not a contest.
-  static const double slowestDelivery = 360;
+  /// Raised from 360 with the physical bat. A slower ball is meant to be
+  /// easier to *time*, not to be a gift: at 360 the extra flight let a batter
+  /// re-place the blade after the bounce, so the difficulty that bowls the
+  /// most spin — the hardest one — conceded the most runs.
+  static const double slowestDelivery = 410;
   static const double fastestDelivery = 560;
 
   /// How far off a straight line the ball moves after pitching, at full
   /// deviation. Seam and spin are the same mechanic with different numbers.
-  static const double maxDeviation = 145;
+  ///
+  /// Raised from 145 when the bat became a place rather than a swing window,
+  /// and that change is the reason. A bat you *hold on a line* is beaten by
+  /// exactly one thing: the ball not staying on the line. With 145 against a
+  /// good length, the ball moved about 38 units in the distance left after
+  /// pitching, which a 47-unit blade covered comfortably — so an accurate
+  /// bowler, who repeats a line, was *easier* to face than a wild one, and the
+  /// measured win rate went the wrong way with difficulty. At 200 a
+  /// well-pitched seamer moves past the edge of the blade, which is both the
+  /// correct answer and the interesting one.
+  static const double maxDeviation = 200;
 
   /// Furthest up and back the ball may pitch. Beyond the first it is a
   /// full toss, before the second a bouncer — both still legal here, both
@@ -83,26 +99,140 @@ abstract final class CricketField {
 
   // --- the bat -------------------------------------------------------------
 
-  /// Ticks either side of the ideal contact tick that still count as contact
-  /// at all. Quarter of a second either way at 120 Hz, and most of that window
-  /// produces a bad shot rather than a good one.
+  /// The plane the bat lives in, down the wicket.
   ///
-  /// This has been wrong in both directions and the history is worth keeping.
-  /// At 20 it was too tight *and* silently one-sided — the shot resolved on the
-  /// tick the ball crossed the bat, so a late swing could never register at
-  /// all, and both sides were bowled out for single figures. Fixing the
-  /// asymmetry doubled the effective window, and at 30 nobody was ever beaten:
-  /// across 240 innings there was not one bowled dismissal. 22 leaves a sloppy
-  /// batter missing roughly one ball in seven and a good one hardly ever.
-  static const int contactWindowTicks = 22;
+  /// The bat is not an event any more. It is a **place**: a rectangle the
+  /// player moves around in the `(across, height)` plane at [contactY], and a
+  /// delivery is struck if the ball happens to pass through it.
+  ///
+  /// That replaced a timing window, and the reason is structural rather than
+  /// cosmetic. A window has to be resolved some number of ticks *after* the
+  /// ball crosses the bat, which made the window silently one-sided for a
+  /// while and needed a paragraph of apology in the code to explain. A place
+  /// resolves on the crossing tick, exactly, because there is nothing to wait
+  /// for — the bat either was there or it was not.
+  ///
+  /// The three things a player controls fall straight out of it:
+  ///
+  /// * **across** — play the line. Get this wrong and you are beaten.
+  /// * **height** — get under the ball to loft it, on top of it to keep it
+  ///   down. Only a badly wrong height misses entirely; mostly it decides
+  ///   *what kind of shot* you played.
+  /// * **when you move** — the bat's own speed at the moment of contact is
+  ///   what sends the ball anywhere. Park the bat on the line and you have
+  ///   played a dead bat, however perfectly it was placed.
+  static const double batPlaneY = contactY;
 
-  /// Ticks either side of ideal that count as *middled*. This is the number
-  /// that decides whether the game feels generous or punishing, and it is
-  /// deliberately generous — the reference for this hub is an arcade game.
-  static const int perfectWindowTicks = 9;
+  /// Half-extents of the blade: across the pitch, and up off the ground.
+  ///
+  /// 30 rather than 38, and the eight units matter more than they look. With
+  /// the ball radius the blade covers 39 units either side, against a
+  /// good-length ball that can move up to 52 off the seam — so a bat placed on
+  /// the pre-bounce line can be beaten by movement. At 38 it could not be, and
+  /// the whole bowling ladder inverted on it: see [maxDeviation].
+  static const double batHalfWidth = 30;
+
+  /// Deliberately generous against the ball's actual height range, which is
+  /// only about 5 to 35 units. Height is a shot-shaping axis, not a
+  /// hit-or-miss one — only a bat on the deck against a climbing bouncer, or
+  /// held high against a yorker, misses on height alone.
+  static const double batHalfHeight = 20;
+
+  /// How far either side of the stumps the bat may reach.
+  static const double batReachX = 130;
+
+  static const double batMinHeight = 0;
+  static const double batMaxHeight = 70;
+
+  /// Where the bat sits when nobody is doing anything with it.
+  static const double batRestHeight = 14;
+
+  /// How fast the bat may travel, in units/s.
+  ///
+  /// Two jobs, and the second one is why this number is as low as it is.
+  ///
+  /// It is the anti-teleport bound — a client that could move the bat
+  /// infinitely fast would put it on every ball at the last instant, and the
+  /// game would be a formality.
+  ///
+  /// And it is what makes deviation mean anything. This was 520 first, and at
+  /// 520 the bat crossed the whole crease in half a second: after the ball
+  /// pitched there were still 0.2 to 0.3 seconds left, in which the bat could
+  /// travel 100 to 150 units and comfortably chase down any movement off the
+  /// seam. Every ball was correctable, so nothing a bowler did mattered and the
+  /// measured difficulty ladder ran the wrong way.
+  ///
+  /// 380 is the compromise, and it was measured in both directions. At 300 the
+  /// ladder was clean but a thumb dragged across the pad took nearly nine
+  /// tenths of a second to be followed, which reads as lag rather than as
+  /// weight. At 380 the blade still only covers about 80 units after the
+  /// bounce, against movement of up to 70 for a seamer and 200 for a big
+  /// turner, so committing to a line is still a real decision with a real
+  /// cost — and the win-rate ladder measured at both values is the same
+  /// shape. **This is the first number to retune against real thumbs.**
+  static const double batMaxSpeed = 380;
+
+  /// The bat speed that counts as a full-blooded swing. Everything about how
+  /// hard the ball leaves is measured against this, so it sits just under
+  /// [batMaxSpeed]: a sweep at the cap is a shot played at full power.
+  static const double batSwingReference = 310;
+
+  /// How much of the return direction comes from where on the blade the ball
+  /// was met.
+  static const double batOffsetInfluence = 0.85;
+
+  /// And how much from how fast the bat was travelling across the line.
+  ///
+  /// This is the term that separates a player who swings through the ball from
+  /// one who holds the bat out and waits — which is to say, the one that makes
+  /// this a game rather than a placement puzzle.
+  static const double batVelocityInfluence = 0.0012;
+
+  /// Bat centre for a normalised across-the-crease value, `0` leg to `1` off.
+  static double batXFor(double normalised) =>
+      pitchCentreX + (clampD(normalised, 0, 1) * 2 - 1) * batReachX;
+
+  /// Bat centre height for a normalised value. `0` is bat up, `1` is bat on
+  /// the deck — a thumb dragged down the glass lowers the bat.
+  static double batHeightFor(double normalised) =>
+      batMaxHeight +
+      (batMinHeight - batMaxHeight) * clampD(normalised, 0, 1);
+
+  /// How hard a delivery pitching at [pitchY], aimed at [targetX], is to bat
+  /// at. Zero for a long hop down the leg side, one for a ball on a length
+  /// hitting the top of off.
+  ///
+  /// Length is worth more than line, which is how bowling actually works: a
+  /// ball on a good length is awkward wherever it is, and a ball short and wide
+  /// is a gift however straight the seam was pointing.
+  ///
+  /// Lives here rather than in the simulation because three separate things
+  /// need it and they must agree: the bot batter, the scripted proxy human in
+  /// the balance harness, and the simulation itself. A proxy that was *not*
+  /// punished by good bowling made the whole bowling half of the ladder
+  /// unmeasurable — every difficulty looked the same from the batting end,
+  /// because the yardstick could not tell a jaffa from a long hop.
+  static double deliveryDifficulty(double pitchY, double targetX) {
+    const goodLength = 790.0;
+    const lengthTolerance = 130.0;
+    final lengthQuality =
+        1 - clampD((pitchY - goodLength).abs() / lengthTolerance, 0, 1);
+    final lineQuality =
+        1 - clampD((targetX - pitchCentreX).abs() / 95, 0, 1);
+    return clampD(0.62 * lengthQuality + 0.38 * lineQuality, 0, 1);
+  }
+
+  /// The normalised target the bat rests at between deliveries.
+  static const Vec2 batStance = Vec2(
+    0.5,
+    (batMaxHeight - batRestHeight) / (batMaxHeight - batMinHeight),
+  );
 
   /// Speed off the bat for a perfectly middled shot at full intent.
-  static const double maxHitSpeed = 1180;
+  /// Nudged up with the physical bat: the ceiling is now only reached by a
+  /// blade moving at its own top speed through the middle of the bat, which is
+  /// rarer than a full-intent slider ever was.
+  static const double maxHitSpeed = 1420;
 
   /// How quickly a ball rolling along the ground gives up its speed, as a
   /// fraction shed per second.
@@ -112,7 +242,12 @@ abstract final class CricketField {
   /// that brings it back. Height is a scalar carried alongside the top-down
   /// position — there is no third axis in the simulation, only a number that
   /// says how far off the deck the ball is.
-  static const double maxLoftSpeed = 470;
+  /// Raised from 470 once loft came from getting under the ball rather than
+  /// from a power slider. With the old value a well-middled lofted shot
+  /// carried about 450 units against a straight boundary at 816: measured over
+  /// three hundred innings, the game contained no sixes at all, which is a
+  /// cricket game missing its best moment.
+  static const double maxLoftSpeed = 690;
   static const double gravity = 620;
 
   /// Above this height a fielder cannot reach the ball at all, so it sails
