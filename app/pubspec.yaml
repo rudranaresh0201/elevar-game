@@ -45,6 +45,7 @@ dependencies:
   # The leaderboard webhook, and nothing else. See data/leaderboard_client.dart.
   http: ^1.2.2
   sqflite_common_ffi_web: ^1.1.2
+  supabase_flutter: ^2.17.2
 
 dev_dependencies:
   flutter_test:

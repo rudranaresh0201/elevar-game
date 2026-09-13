@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 
 import '../data/leaderboard_client.dart';
 import '../data/leaderboard_service.dart';
+import '../data/live_board.dart';
 import '../data/player_profile.dart';
 import '../data/points_repository.dart';
 import '../data/profile_repository.dart';
@@ -16,11 +19,14 @@ import 'format.dart';
 /// shows the player their own lifetime total, and layers the world's numbers
 /// on top when it has them.
 class LeaderboardScreen extends StatefulWidget {
-  const LeaderboardScreen({this.service, super.key});
+  const LeaderboardScreen({this.service, this.live, super.key});
 
   /// Injected by tests. In the app this is built from the compiled-in
   /// endpoint.
   final LeaderboardService? service;
+
+  /// The realtime board. Defaults to the app's [liveBoard]; injected by tests.
+  final LiveBoard? live;
 
   @override
   State<LeaderboardScreen> createState() => _LeaderboardScreenState();
@@ -29,17 +35,26 @@ class LeaderboardScreen extends StatefulWidget {
 class _LeaderboardScreenState extends State<LeaderboardScreen> {
   late final LeaderboardService _service =
       widget.service ?? LeaderboardService();
+  late final LiveBoard _live = widget.live ?? liveBoard;
 
   BoardResult? _board;
   PlayerProfile? _profile;
   int _lifetime = 0;
   int _matches = 0;
   bool _loading = true;
+  BoardTab _tab = BoardTab.overall;
+  StreamSubscription<LeaderboardSnapshot>? _subscription;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    unawaited(_subscription?.cancel());
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -48,16 +63,55 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     final profile = await profileRepository.profile();
     final lifetime = await pointsRepository.lifetimePoints();
     final stats = await pointsRepository.perGameStats();
-    final board = await _service.refresh();
 
     if (!mounted) return;
     setState(() {
       _profile = profile;
       _lifetime = lifetime;
       _matches = stats.fold<int>(0, (sum, stat) => sum + stat.played);
+    });
+
+    if (_live.isConfigured) {
+      _watch(_tab);
+      return;
+    }
+
+    final board = await _service.refresh();
+    if (!mounted) return;
+    setState(() {
       _board = board;
       _loading = false;
     });
+  }
+
+  /// Subscribes to one board. Every change anyone makes to it arrives here and
+  /// repaints the list: nobody has to pull to refresh to see a new leader.
+  void _watch(BoardTab tab) {
+    unawaited(_subscription?.cancel());
+    setState(() {
+      _tab = tab;
+      _loading = true;
+    });
+    _subscription = _live.watch(tab).listen(
+      (snapshot) {
+        if (!mounted) return;
+        setState(() {
+          _board = BoardResult(snapshot: snapshot, status: BoardStatus.live);
+          _loading = false;
+        });
+      },
+      onError: (Object error) {
+        if (!mounted) return;
+        setState(() {
+          _board = BoardResult(
+            snapshot: (_board?.snapshot ?? LeaderboardSnapshot.empty).asStale(),
+            status: BoardStatus.stale,
+            error: 'Could not reach the leaderboard. Pull down to retry.',
+          );
+          _loading = false;
+        });
+      },
+    );
   }
 
   @override
@@ -76,9 +130,17 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             Text('LEADERBOARD', style: ElevarType.display(30)),
             const SizedBox(height: 4),
             Text(
-              'Lifetime EP. Spending it never costs you your place.',
+              _tab.gameSlug == null
+                  ? 'Lifetime EP. Spending it never costs you your place.'
+                  : (_tab.metric == BoardMetric.wins
+                      ? 'Most wins against the bot.'
+                      : 'Best single game.'),
               style: ElevarType.body(14, color: ElevarColors.muted),
             ),
+            if (_live.isConfigured) ...<Widget>[
+              const SizedBox(height: 14),
+              _Tabs(selected: _tab, onSelect: _watch),
+            ],
             const SizedBox(height: 18),
             _YouCard(
               profile: _profile,
@@ -105,7 +167,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 for (final row in board.snapshot.rows)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 8),
-                    child: _BoardRow(row: row),
+                    child: _BoardRow(row: row, unit: _tab.unit),
                   ),
             ],
           ],
@@ -226,8 +288,8 @@ class _StatusNote extends StatelessWidget {
   Widget build(BuildContext context) {
     final (IconData icon, String text, Color colour) = switch (board.status) {
       BoardStatus.live => (
-          Icons.public_rounded,
-          'Live · updated just now',
+          Icons.bolt_rounded,
+          'LIVE · updates the moment anyone scores',
           ElevarColors.table,
         ),
       BoardStatus.stale => (
@@ -315,10 +377,50 @@ class _EmptyBoard extends StatelessWidget {
   }
 }
 
+class _Tabs extends StatelessWidget {
+  const _Tabs({required this.selected, required this.onSelect});
+
+  final BoardTab selected;
+  final ValueChanged<BoardTab> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 40,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: BoardTab.all.length,
+        separatorBuilder: (context, index) => const SizedBox(width: 8),
+        itemBuilder: (context, i) {
+          final tab = BoardTab.all[i];
+          final on = tab.label == selected.label;
+          return GestureDetector(
+            onTap: () => onSelect(tab),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: on ? ElevarColors.ball : ElevarColors.surfaceRaised,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: ElevarColors.ink, width: 2),
+              ),
+              child: Text(
+                tab.label,
+                style: ElevarType.display(14, color: on ? ElevarColors.ink : ElevarColors.muted),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
 class _BoardRow extends StatelessWidget {
-  const _BoardRow({required this.row});
+  const _BoardRow({required this.row, this.unit = 'EP'});
 
   final LeaderboardRow row;
+  final String unit;
 
   /// Gold, silver, bronze, then nothing. A podium that goes six deep is not a
   /// podium.
@@ -378,6 +480,8 @@ class _BoardRow extends StatelessWidget {
             groupedNumber(row.points),
             style: ElevarType.display(17, color: ElevarColors.ball),
           ),
+          const SizedBox(width: 4),
+          Text(unit, style: ElevarType.label(8)),
         ],
       ),
     );

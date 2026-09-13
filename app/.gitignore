@@ -46,3 +46,6 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Supabase keys for builds. Copy elevar.env.example.json and fill it in.
+elevar.env.json

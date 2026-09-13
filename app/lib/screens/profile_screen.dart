@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 
+
+import '../data/live_board.dart';
 import '../data/player_profile.dart';
 import '../data/points_repository.dart';
 import '../data/profile_repository.dart';
@@ -53,6 +57,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _pickAvatar(int index) async {
     final updated = await profileRepository.updateProfile(avatarIndex: index);
+    unawaited(syncProfileToBoard());
     if (!mounted) return;
     setState(() => _profile = updated);
   }
@@ -71,6 +76,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (chosen == null) return;
 
     final updated = await profileRepository.updateProfile(displayName: chosen);
+    // A rename shows on the board straight away, not after the next match.
+    unawaited(syncProfileToBoard());
     if (!mounted) return;
     setState(() => _profile = updated);
   }

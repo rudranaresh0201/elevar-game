@@ -1,8 +1,13 @@
+import 'dart:async';
+
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:game_core/game_core.dart';
 
+
+import '../data/live_board.dart';
 import '../data/points_repository.dart';
+import '../data/profile_repository.dart';
 import '../scoring/points_estimate.dart';
 
 /// One line of game-specific detail on the result screen.
@@ -69,6 +74,9 @@ class _ResultScreenState extends State<ResultScreen> {
       estimate: estimate,
       replay: widget.replay,
     );
+    // After the ledger write, so the totals sent include this match. Not
+    // awaited: the board is never allowed to hold up the points card.
+    unawaited(syncAfterMatch(widget.result, buildSubmission));
 
     if (!mounted) return;
     setState(() {
