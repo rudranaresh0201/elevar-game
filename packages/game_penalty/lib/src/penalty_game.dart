@@ -76,6 +76,11 @@ class PenaltyGame extends FlameGame {
   int bannerSerial = 0;
 
   final math.Random _visual = math.Random(3);
+
+  /// Floating point callouts in the goal: BULLSEYE, TOP BINS.
+  final List<({String text, Vec3 at, double age})> _pops =
+      <({String text, Vec3 at, double age})>[];
+  List<({String text, Vec3 at, double age})> get pops => _pops;
   bool _finished = false;
   int saves = 0;
 
@@ -179,12 +184,76 @@ class PenaltyGame extends FlameGame {
     );
   }
 
-  void tapDive(Offset at) {
+  Offset? _keeperStart;
+
+  /// A keeper's finger has landed. A swipe dives the way it points; a tap
+  /// dives to where it landed. Football Strike's keeper is a swipe, and it is
+  /// the more natural gesture — a flick toward the corner the ball is going.
+  void beginKeeper(Offset at) {
+    if (!simulation.acceptsDive) return;
+    _keeperStart = at;
+  }
+
+  void moveKeeper(Offset at) {
+    final start = _keeperStart;
+    if (start == null) return;
+    final delta = at - start;
+    if (delta.distance < 28) return;
+    // Committed as soon as the swipe reads as one: waiting for the finger to
+    // lift costs a keeper the tenth of a second the save needed.
+    _keeperStart = null;
+    _dive(start + delta * 2.4);
+  }
+
+  void endKeeper(Offset at) {
+    final start = _keeperStart;
+    _keeperStart = null;
+    if (start == null) return;
+    _dive(at);
+  }
+
+  void tapDive(Offset at) => _dive(at);
+
+  void _dive(Offset at) {
     if (!simulation.acceptsDive) return;
     final point = camera3d.unproject(at, planeZ: Goal.keeperZ);
     diveMarker = point;
     runner.dive(point);
     unawaited(HapticFeedback.selectionClick());
+  }
+
+  /// Where the save marker is drawn for the current shot, and how big.
+  ///
+  /// A keeper on a phone cannot read a ball's line from a perspective view in
+  /// half a second, so the first versions asked the impossible and nobody
+  /// saved anything. This is the read a real keeper gets from the kicker's
+  /// body: the rough spot, not the exact one. Harder bots give a vaguer read.
+  ({GoalPoint centre, double radius})? get saveZone {
+    final sim = simulation;
+    if (!sim.keeperIsHuman || sim.phase != PenaltyPhase.flight) return null;
+    final crossing = sim.predictCrossing(Goal.keeperZ);
+    final difficulty = sim.botDifficulty;
+    final (double wobble, double radius) = switch (difficulty) {
+      null || BotDifficulty.easy => (0.1, 0.6),
+      BotDifficulty.medium => (0.35, 0.8),
+      BotDifficulty.hard => (0.6, 1.0),
+    };
+    final kick = sim.p1Kicks.length + sim.p2Kicks.length;
+    final r = math.Random(config.seed * 31 + kick);
+    return (
+      centre: GoalPoint(
+        crossing.x + (r.nextDouble() * 2 - 1) * wobble,
+        crossing.y + (r.nextDouble() * 2 - 1) * wobble * 0.5,
+      ),
+      radius: radius,
+    );
+  }
+
+  /// 0 at the kick, 1 as the ball reaches the keeper.
+  double get flightProgress {
+    final sim = simulation;
+    if (sim.phase != PenaltyPhase.flight) return 1;
+    return clampD((Goal.spotZ - sim.ball.z) / (Goal.spotZ - Goal.keeperZ), 0, 1);
   }
 
   // --- loop ----------------------------------------------------------------
@@ -224,6 +293,9 @@ class PenaltyGame extends FlameGame {
         replay: replay,
         kicksEach: simulation.p1Kicks.length,
         saves: saves,
+        points: simulation.p1Points,
+        bullseyes: simulation.p1Bullseyes,
+        catches: simulation.p1Catches,
       ));
     }
   }
@@ -238,6 +310,12 @@ class PenaltyGame extends FlameGame {
           hudRevision.value++;
         case PenaltyEventType.keeperDive:
           hudRevision.value++;
+        case PenaltyEventType.bullseye:
+          flash = 0.8;
+          _confetti(const Color(0xFFFFF200));
+          _pops.add((text: 'BULLSEYE +${e.value.round()}', at: e.at, age: 0));
+        case PenaltyEventType.topCorner:
+          _pops.add((text: 'TOP BINS! +50', at: e.at + const Vec3(0, 0.4, 0), age: 0));
         case PenaltyEventType.goal:
           netBulge = 1;
           bulgeAt = GoalPoint(e.at.x, e.at.y);
@@ -251,7 +329,13 @@ class PenaltyGame extends FlameGame {
         case PenaltyEventType.save:
           shake = 14;
           if (simulation.shooter == PenaltySide.p2) saves++;
-          _banner('SAVED!', const Color(0xFFFFF200));
+          final caught = simulation.lastSaveCaught;
+          _banner(caught ? 'WHAT A CATCH!' : 'SAVED!',
+              caught ? const Color(0xFF3DFF6E) : const Color(0xFFFFF200));
+          if (caught) {
+            flash = 0.5;
+            _confetti(const Color(0xFFB6F23A));
+          }
           unawaited(HapticFeedback.heavyImpact());
         case PenaltyEventType.post:
           shake = 20;
@@ -315,6 +399,14 @@ class PenaltyGame extends FlameGame {
       if (before < 1.5 && swipeHintAge >= 1.5) hudRevision.value++;
     }
     aimMarkerAge += dt;
+    for (var i = _pops.length - 1; i >= 0; i--) {
+      final p = _pops[i];
+      if (p.age > 1.3) {
+        _pops.removeAt(i);
+      } else {
+        _pops[i] = (text: p.text, at: p.at, age: p.age + dt);
+      }
+    }
     for (var i = confetti.length - 1; i >= 0; i--) {
       confetti[i].advance(dt);
       if (confetti[i].life <= 0) confetti.removeAt(i);

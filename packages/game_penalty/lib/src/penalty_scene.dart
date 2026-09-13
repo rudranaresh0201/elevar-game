@@ -60,13 +60,16 @@ class PenaltyScene extends Component {
     // frame is right for every shot that matters.
     final ballBehindKeeper = game.simulation.ball.z < Goal.keeperZ;
     if (ballBehindKeeper) _paintBall(canvas);
+    _paintBonusTarget(canvas);
     _paintKeeper(canvas);
     _paintFrame(canvas);
+    _paintSaveZone(canvas);
     _paintDiveMarker(canvas);
     _paintAimMarker(canvas);
     _paintKicker(canvas);
     if (!ballBehindKeeper) _paintBall(canvas);
     _paintSwipe(canvas);
+    _paintPops(canvas);
     _paintConfetti(canvas);
     canvas.restore();
 
@@ -449,6 +452,75 @@ class PenaltyScene extends Component {
     }
     canvas.restore();
     canvas.drawCircle(at, r, _ink..strokeWidth = math.max(2, r * 0.18));
+  }
+
+  /// The bonus target: a glowing bullseye hung in the goal for this kick.
+  void _paintBonusTarget(Canvas canvas) {
+    final sim = game.simulation;
+    final target = sim.bonusTarget;
+    if (target == null || sim.phase == PenaltyPhase.complete) return;
+    if (sim.phase == PenaltyPhase.outcome && sim.lastResult != KickResult.goal) return;
+    final (at, scale) = cam.project(target.x, target.y, -0.05);
+    final r = PenaltySimulation.bonusRadius * scale;
+    final pulse = 1 + 0.08 * math.sin(_time * 6);
+    canvas.drawCircle(at, r * 1.5 * pulse, Paint()..color = const Color(0x33FFF200));
+    for (final (f, colour) in <(double, Color)>[
+      (1.0, const Color(0xFFFF3DA6)),
+      (0.68, const Color(0xFFFFFFFF)),
+      (0.36, const Color(0xFFFF3DA6)),
+    ]) {
+      canvas.drawCircle(at, r * f * pulse, Paint()..color = colour.withValues(alpha: 0.85));
+    }
+    canvas.drawCircle(at, r * pulse, _ink..strokeWidth = 3);
+    final label = _painter('+150', math.max(11, r * 0.55), ElevarColors.ink);
+    label.paint(canvas, at + Offset(-label.width / 2, r * pulse + 2));
+  }
+
+  /// The keeper's read: a circle where the ball is heading and a ring that
+  /// closes on it as the ball arrives. Get the glove into the circle before
+  /// the ring closes.
+  void _paintSaveZone(Canvas canvas) {
+    final zone = game.saveZone;
+    if (zone == null) return;
+    final (at, scale) = cam.project(zone.centre.x, zone.centre.y, Goal.keeperZ);
+    final r = zone.radius * scale;
+    final t = game.flightProgress;
+    final late = t > 0.7;
+    final colour = late ? const Color(0xFFFF4D4D) : const Color(0xFFFFF200);
+    canvas.drawCircle(at, r, Paint()..color = colour.withValues(alpha: 0.22));
+    canvas.drawCircle(
+      at,
+      r,
+      Paint()
+        ..color = colour
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 4,
+    );
+    // The closing ring.
+    canvas.drawCircle(
+      at,
+      r * (1 + (1 - t) * 2.2),
+      Paint()
+        ..color = colour.withValues(alpha: 0.9)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3,
+    );
+    final glove = _painter('SAVE!', math.max(12, r * 0.45), ElevarColors.ink);
+    glove.paint(canvas, at - Offset(glove.width / 2, glove.height / 2));
+  }
+
+  void _paintPops(Canvas canvas) {
+    for (final p in game.pops) {
+      final t = p.age / 1.3;
+      final at = cam.at(p.at.x, p.at.y, 0) - Offset(0, 40 * t);
+      final painter = _painter(p.text, 22, const Color(0xFFFFF200));
+      final outline = _painter(p.text, 22, ElevarColors.ink);
+      final origin = at - Offset(painter.width / 2, painter.height / 2);
+      for (final o in const <Offset>[Offset(-2, 0), Offset(2, 0), Offset(0, -2), Offset(0, 3)]) {
+        outline.paint(canvas, origin + o);
+      }
+      painter.paint(canvas, origin);
+    }
   }
 
   void _paintAimMarker(Canvas canvas) {

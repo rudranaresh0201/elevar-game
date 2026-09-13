@@ -21,11 +21,13 @@ class FruitDropOutcome {
     required this.merges,
     required this.drops,
     required this.endReason,
-    required this.dropBonus,
+    required this.stars,
+    required this.target,
   });
 
   final RoundEnd? endReason;
-  final int dropBonus;
+  final int stars;
+  final int target;
 
   final GameResult result;
   final List<int> replay;

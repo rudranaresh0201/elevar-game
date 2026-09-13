@@ -21,7 +21,11 @@ class CricketGameScreen extends StatelessWidget {
         onComplete: (outcome) {
           final result = outcome.result;
           final won = result.outcome == MatchOutcome.p1Win;
-          Navigator.of(context).pushReplacement(
+          // Held now, while this screen is still mounted. PLAY AGAIN runs
+          // after the result screen has replaced this one, and looking the
+          // navigator up from this context then throws.
+          final navigator = Navigator.of(context);
+          navigator.pushReplacement(
             MaterialPageRoute<void>(
               builder: (_) => ResultScreen(
                 result: result,
@@ -35,7 +39,7 @@ class CricketGameScreen extends StatelessWidget {
                   (label: 'TARGET', value: '${outcome.target}'),
                   (label: 'FOURS · SIXES', value: '${outcome.fours} · ${outcome.sixes}'),
                 ],
-                onPlayAgain: () => Navigator.of(context).pushReplacement(
+                onPlayAgain: () => navigator.pushReplacement(
                   MaterialPageRoute<void>(
                     builder: (_) => CricketGameScreen(config: config.rematch(result.seed)),
                   ),

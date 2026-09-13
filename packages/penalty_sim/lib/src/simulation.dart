@@ -82,7 +82,18 @@ class ShooterProfile {
       };
 }
 
-enum PenaltyEventType { kick, keeperDive, save, goal, post, missed, bounce, complete }
+enum PenaltyEventType {
+  kick,
+  keeperDive,
+  save,
+  goal,
+  bullseye,
+  topCorner,
+  post,
+  missed,
+  bounce,
+  complete,
+}
 
 class PenaltyEvent {
   const PenaltyEvent(this.type, {this.at = Vec3.zero, this.value = 0});
@@ -137,7 +148,8 @@ class PenaltySimulation {
     this.botDifficulty,
   })  : assert(mode != GameMode.vsBot || botDifficulty != null),
         _keeperRng = DeterministicRng.stream(seed, 1),
-        _shooterRng = DeterministicRng.stream(seed, 2) {
+        _shooterRng = DeterministicRng.stream(seed, 2),
+        _targetRng = DeterministicRng.stream(seed, 3) {
     _startKick();
   }
 
@@ -147,6 +159,31 @@ class PenaltySimulation {
 
   final DeterministicRng _keeperRng;
   final DeterministicRng _shooterRng;
+  final DeterministicRng _targetRng;
+
+  /// Where the bonus target sits for this kick, when a person is shooting.
+  /// Through it is a goal and a bullseye.
+  GoalPoint? bonusTarget;
+  static const double bonusRadius = 0.5;
+
+  /// Style points, per side. Goals decide the shootout; points are what a
+  /// leaderboard can rank, and what makes one 5-4 better than another.
+  int p1Points = 0;
+  int p2Points = 0;
+  int p1Bullseyes = 0;
+  int p1Catches = 0;
+
+  static const int goalPoints = 100;
+  static const int bullseyePoints = 150;
+  static const int topCornerPoints = 50;
+  static const int savePoints = 100;
+  static const int catchPoints = 150;
+
+  /// True when the last save was held rather than parried.
+  bool lastSaveCaught = false;
+
+  /// Where the keeper was when the dive began.
+  GoalPoint _diveFrom = keeperHome;
   final EdgeTrigger _fireEdge = EdgeTrigger();
   final EdgeTrigger _diveEdge = EdgeTrigger();
 
@@ -238,9 +275,9 @@ class PenaltySimulation {
   double get diveProgress {
     final target = keeperTarget;
     if (target == null) return 0;
-    final total = _distance(keeperHome, target);
+    final total = _distance(_diveFrom, target);
     if (total < 0.05) return 0;
-    return clampD(_distance(keeperHome, keeper) / total, 0, 1);
+    return clampD(_distance(_diveFrom, keeper) / total, 0, 1);
   }
 
   void step(PenaltyInput input) {
@@ -294,6 +331,7 @@ class PenaltySimulation {
         break;
     }
     if (phase == PenaltyPhase.runUp || phase == PenaltyPhase.aim) {
+      _swayKeeper();
       _moveKeeper();
     }
   }
@@ -312,6 +350,14 @@ class PenaltySimulation {
     keeperTarget = null;
     keeperCommitted = false;
     keeperWentEarly = false;
+    lastSaveCaught = false;
+    _diveFrom = keeperHome;
+    bonusTarget = shooterIsHuman
+        ? GoalPoint(
+            _targetRng.nextSign() * _targetRng.nextRange(1.3, 2.9),
+            _targetRng.nextRange(0.55, 1.9),
+          )
+        : null;
     _enter(PenaltyPhase.aim);
   }
 
@@ -397,10 +443,24 @@ class PenaltySimulation {
 
   static GoalPoint _clampDive(GoalPoint p) => GoalPoint(
         clampD(p.x, -3.5, 3.5),
-        clampD(p.y, 0.35, 2.2),
+        // Centre height, not hand height: at 1.75 the gloves reach just
+        // under three metres, over the bar but not into the stands.
+        clampD(p.y, 0.35, 1.75),
       );
 
+  /// A bot keeper does not stand still waiting for the kick: it shuffles
+  /// across its line, so the open side of the goal keeps changing and the
+  /// moment you strike matters. A triangle wave, so no trigonometry.
+  void _swayKeeper() {
+    if (keeperIsHuman || keeperCommitted) return;
+    const period = 150;
+    final t = (tick % period) / period;
+    final wave = t < 0.5 ? t * 4 - 1 : 3 - t * 4;
+    keeper = GoalPoint(wave * 0.6, keeperHome.y);
+  }
+
   void _commitKeeper(GoalPoint target, {required int startTick}) {
+    _diveFrom = keeper;
     keeperTarget = target;
     keeperCommitted = true;
     _diveStartTick = startTick;
@@ -431,8 +491,8 @@ class PenaltySimulation {
     final target = keeperTarget;
     var dx = 0.0, dy = 1.0;
     if (target != null) {
-      final ox = target.x - keeperHome.x;
-      final oy = target.y - keeperHome.y;
+      final ox = target.x - _diveFrom.x;
+      final oy = target.y - _diveFrom.y;
       final length = _sqrt(ox * ox + oy * oy);
       if (length > 0.3) {
         final t = diveProgress;
@@ -498,13 +558,26 @@ class PenaltySimulation {
           final x = before.x + (ball.x - before.x) * t;
           final y = before.y + (ball.y - before.y) * t;
           if (_keeperTouches(x, y)) {
-            final push = x - keeper.x;
-            ballVelocity = Vec3(
-              ballVelocity.x * 0.25 + (push >= 0 ? 3.2 : -3.2),
-              ballVelocity.y.abs() * 0.4 + 2.2,
-              -ballVelocity.z * 0.3,
-            );
-            ball = Vec3(x, y, Goal.keeperZ + 0.05);
+            final target = keeperTarget;
+            // A dive that went to where the ball went, and got there, holds
+            // it. Anything else that touches it is a parry.
+            final caught = keeperIsHuman &&
+                target != null &&
+                _distance(target, GoalPoint(x, y)) < 0.6 &&
+                _distance(keeper, target) < 0.35;
+            lastSaveCaught = caught;
+            if (caught) {
+              ballVelocity = Vec3.zero;
+              ball = Vec3(x, y, Goal.keeperZ + 0.05);
+            } else {
+              final push = x - keeper.x;
+              ballVelocity = Vec3(
+                ballVelocity.x * 0.25 + (push >= 0 ? 3.2 : -3.2),
+                ballVelocity.y.abs() * 0.4 + 2.2,
+                -ballVelocity.z * 0.3,
+              );
+              ball = Vec3(x, y, Goal.keeperZ + 0.05);
+            }
             _resolve(KickResult.saved);
             continue;
           }
@@ -515,6 +588,10 @@ class PenaltySimulation {
           final y = before.y + (ball.y - before.y) * t;
           _judgeLine(x, y);
         }
+      } else if (lastResult == KickResult.saved && lastSaveCaught) {
+        final hands = keeperBody().b;
+        ball = Vec3(hands.x, hands.y, Goal.keeperZ + 0.05);
+        ballVelocity = Vec3.zero;
       } else if (lastResult == KickResult.goal && ball.z < -Goal.netDepth + 0.2) {
         // Caught by the net.
         ball = ball.copyWith(z: -Goal.netDepth + 0.2);
@@ -539,13 +616,46 @@ class PenaltySimulation {
     final inside = x.abs() < Goal.halfWidth && y < Goal.height;
     if (inside) {
       ballVelocity = ballVelocity * 0.45;
+      _scoreGoal(x, y);
       _resolve(KickResult.goal);
     } else {
       _resolve(KickResult.missed);
     }
   }
 
+  /// Pays a goal and whatever made it special.
+  void _scoreGoal(double x, double y) {
+    var points = goalPoints;
+    final target = bonusTarget;
+    if (target != null &&
+        _distance(target, GoalPoint(x, y)) < bonusRadius + Goal.ballRadius) {
+      points += bullseyePoints;
+      if (shooter == PenaltySide.p1) p1Bullseyes++;
+      pendingEvents.add(PenaltyEvent(PenaltyEventType.bullseye,
+          at: Vec3(x, y, 0), value: bullseyePoints.toDouble()));
+    }
+    if (x.abs() > Goal.halfWidth - 1.0 && y > Goal.height - 0.75) {
+      points += topCornerPoints;
+      pendingEvents.add(PenaltyEvent(PenaltyEventType.topCorner, at: Vec3(x, y, 0)));
+    }
+    if (shooter == PenaltySide.p1) {
+      p1Points += points;
+    } else {
+      p2Points += points;
+    }
+  }
+
   void _resolve(KickResult result) {
+    if (result == KickResult.saved) {
+      final points = lastSaveCaught ? savePoints + catchPoints : savePoints;
+      // The keeper is whoever is not shooting.
+      if (shooter == PenaltySide.p1) {
+        p2Points += points;
+      } else {
+        p1Points += points;
+        if (lastSaveCaught) p1Catches++;
+      }
+    }
     _resolved = true;
     lastResult = result;
     (shooter == PenaltySide.p1 ? p1Kicks : p2Kicks).add(result);

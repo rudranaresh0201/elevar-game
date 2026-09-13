@@ -4,12 +4,16 @@ import 'package:game_core/game_core.dart';
 /// fruit you get to reach it with.
 ///
 /// The first build handed out unlimited fruit, so every target fell to
-/// patience. A drop budget is what Candy Crush's move limit and Bubble
-/// Shooter's ball count are: it turns "keep going" into "every drop counts".
+/// patience; the second gave 60-70 drops for a few hundred points, which
+/// play-testing called unrealistic next to how Suika is actually scored. A
+/// scripted player makes about 7 points a drop over a long round; a person
+/// somewhat fewer. So: a budget of 100-150 drops, and targets in the range
+/// real Suika scores live in, with stars above the target the way Candy
+/// Crush does it.
 enum JarSize {
-  wide(width: 700, target: 250, drops: 60),
-  standard(width: 640, target: 400, drops: 70),
-  narrow(width: 580, target: 500, drops: 70);
+  wide(width: 700, target: 500, drops: 100),
+  standard(width: 640, target: 750, drops: 120),
+  narrow(width: 580, target: 1000, drops: 150);
 
   const JarSize({required this.width, required this.target, required this.drops});
 
@@ -48,11 +52,9 @@ abstract final class Fruits {
   /// Two watermelons pop entirely, for this on top.
   static const int watermelonBonus = 100;
 
-  /// Paid per unused drop when the target is reached early.
-  static const int dropBonus = 10;
 }
 
-enum RoundEnd { targetHit, outOfDrops, jarFull }
+enum RoundEnd { outOfDrops, jarFull }
 
 class Fruit {
   Fruit({
@@ -118,14 +120,24 @@ class FruitInput {
 /// original is loved for. It uses one square root and no trigonometry, so a
 /// pile settles identically on every phone and on the verifier.
 class FruitDropSimulation {
-  FruitDropSimulation({required this.seed, required this.jar})
-      : _rng = DeterministicRng.stream(seed, 1) {
+  FruitDropSimulation({
+    required this.seed,
+    required this.jar,
+    int? budgetOverride,
+    int? targetOverride,
+  })  : dropBudget = budgetOverride ?? jar.drops,
+        target = targetOverride ?? jar.target,
+        _rng = DeterministicRng.stream(seed, 1) {
     current = _pickTier();
     next = _pickTier();
   }
 
   final int seed;
   final JarSize jar;
+
+  /// Fruit available this round, and the score that wins it.
+  final int dropBudget;
+  final int target;
   final DeterministicRng _rng;
   final EdgeTrigger _drop = EdgeTrigger();
 
@@ -158,9 +170,6 @@ class FruitDropSimulation {
   bool gameOver = false;
   RoundEnd? endReason;
 
-  /// Points added for drops left over when the target was reached.
-  int dropBonus = 0;
-
   /// Ticks the jar has been quiet since the round ran out of things to do.
   int _settleTicks = 0;
   static const int _settleLimit = 100;
@@ -174,12 +183,17 @@ class FruitDropSimulation {
   final List<Fruit> fruits = <Fruit>[];
   final List<FruitEvent> pendingEvents = <FruitEvent>[];
 
-  int get dropsLeft => jar.drops - drops;
+  int get dropsLeft => dropBudget - drops;
 
-  bool get targetReached => score >= jar.target;
+  bool get targetReached => score >= target;
 
-  bool get canDrop =>
-      !gameOver && _cooldown == 0 && dropsLeft > 0 && !targetReached;
+  /// Candy Crush stars: the target is one, a quarter over is two, half over
+  /// is three.
+  int get stars => score >= target * 1.5
+      ? 3
+      : (score >= target * 1.25 ? 2 : (score >= target ? 1 : 0));
+
+  bool get canDrop => !gameOver && _cooldown == 0 && dropsLeft > 0;
   bool get isComplete => gameOver;
 
   /// 0..1: how close the worst fruit is to ending the game.
@@ -240,19 +254,14 @@ class FruitDropSimulation {
     _checkDanger();
     if (gameOver) return;
 
-    // Out of fruit, or target reached: let the cascade finish, then end. A
-    // merge still happening resets the wait, so a chain that tips the score
-    // over the target in its last second still counts.
-    if ((dropsLeft == 0 || targetReached) && _cooldown == 0) {
+    // Out of fruit: let the cascade finish, then end. A merge still
+    // happening resets the wait, so a chain that tips the score over the
+    // target in its last second still counts. Reaching the target does not
+    // end the round — the remaining drops are for stars.
+    if (dropsLeft == 0 && _cooldown == 0) {
       _settleTicks = merges == mergesBefore ? _settleTicks + 1 : 0;
       if (_settleTicks >= _settleLimit) {
-        if (targetReached) {
-          dropBonus = dropsLeft * Fruits.dropBonus;
-          score += dropBonus;
-          _end(RoundEnd.targetHit);
-        } else {
-          _end(RoundEnd.outOfDrops);
-        }
+        _end(RoundEnd.outOfDrops);
         return;
       }
     }
@@ -435,7 +444,7 @@ class FruitDropSimulation {
     pendingEvents.add(const FruitEvent(FruitEventType.gameOver));
   }
 
-  double get normalizedSkill => clampD(score / (jar.target * 1.5), 0, 1);
+  double get normalizedSkill => clampD(score / (target * 1.5), 0, 1);
 
   GameResult buildResult({String? sessionToken, List<int>? replay}) => GameResult(
         gameSlug: 'fruit_drop',
@@ -443,8 +452,8 @@ class FruitDropSimulation {
         botDifficulty: jar.difficulty,
         durationMs: tick * 1000 ~/ tickHz,
         p1Score: score,
-        p2Score: jar.target,
-        outcome: score >= jar.target ? MatchOutcome.p1Win : MatchOutcome.p2Win,
+        p2Score: target,
+        outcome: score >= target ? MatchOutcome.p1Win : MatchOutcome.p2Win,
         normalizedSkill: normalizedSkill,
         seed: seed,
         tickCount: tick,

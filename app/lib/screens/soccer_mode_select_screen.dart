@@ -42,10 +42,10 @@ class _SoccerModeSelectScreenState extends State<SoccerModeSelectScreen> {
       startLabel: 'KICK OFF',
       onStart: _start,
       howTo: const <(IconData, String)>[
-        (Icons.swipe_up_rounded, 'Swipe the ball toward the goal. Faster is harder.'),
-        (Icons.redo_rounded, 'Curve your swipe to bend it round the keeper.'),
-        (Icons.sports_handball_rounded, 'Then you\'re in goal — tap where to dive.'),
-        (Icons.emoji_events_rounded, 'Five kicks each, then sudden death.'),
+        (Icons.swipe_up_rounded, 'Swipe the ball at the goal. Curve it round the keeper.'),
+        (Icons.adjust_rounded, 'Hit the bullseye target for +150. Top corners +50.'),
+        (Icons.sports_handball_rounded, 'In goal, a circle shows the shot. Swipe to it to save.'),
+        (Icons.emoji_events_rounded, 'Five kicks each, then sudden death. Catches score big.'),
       ],
       children: <Widget>[
         SetupSection(

@@ -80,20 +80,41 @@ void main() {
     }
   });
 
-  test('reaching the target ends the round and pays for unused drops', () {
-    final sim = FruitDropSimulation(seed: 1, jar: JarSize.wide);
-    // Two watermelons are 166 points; three pairs clear the 250 target.
-    for (var pair = 0; pair < 3 && !sim.targetReached; pair++) {
-      place(sim, Fruits.watermelon, 250);
-      place(sim, Fruits.watermelon, 390, ticks: 400);
+  test('reaching the target keeps the round going, for stars', () {
+    final sim = FruitDropSimulation(seed: 1, jar: JarSize.wide, targetOverride: 150);
+    expect(sim.stars, 0);
+    // Two watermelons are 166 points: past the target, short of two stars.
+    place(sim, Fruits.watermelon, 250);
+    place(sim, Fruits.watermelon, 390, ticks: 400);
+    for (var i = 0; i < 200; i++) {
+      sim.step(const FruitInput());
+    }
+    expect(sim.targetReached, isTrue);
+    expect(sim.isComplete, isFalse);
+    expect(sim.canDrop, isTrue);
+    expect(sim.stars, 1);
+  });
+
+  test('stars step up at a quarter and a half over the target', () {
+    final sim = FruitDropSimulation(seed: 1, jar: JarSize.wide, targetOverride: 100);
+    sim.score = 124;
+    expect(sim.stars, 1);
+    sim.score = 125;
+    expect(sim.stars, 2);
+    sim.score = 150;
+    expect(sim.stars, 3);
+  });
+
+  test('a tiny budget runs out and ends the round', () {
+    final sim = FruitDropSimulation(seed: 1, jar: JarSize.wide, budgetOverride: 3);
+    for (var i = 0; i < 3; i++) {
+      place(sim, i, 100.0 + i * 200);
     }
     for (var i = 0; i < 200 && !sim.isComplete; i++) {
       sim.step(const FruitInput());
     }
     expect(sim.isComplete, isTrue);
-    expect(sim.endReason, RoundEnd.targetHit);
-    expect(sim.dropBonus, (JarSize.wide.drops - sim.drops) * Fruits.dropBonus);
-    expect(sim.canDrop, isFalse);
+    expect(sim.endReason, RoundEnd.outOfDrops);
   });
 
   test('a recorded game replays to the same score', () {

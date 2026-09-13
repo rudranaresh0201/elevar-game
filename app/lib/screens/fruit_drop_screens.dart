@@ -46,7 +46,8 @@ class _FruitDropModeSelectScreenState extends State<FruitDropModeSelectScreen> {
       children: <Widget>[
         SetupSection(
           label: 'JAR',
-          caption: 'Score ${_jar.target} in ${_jar.drops} drops. '
+          caption: 'Score ${_jar.target} in ${_jar.drops} drops for ★. '
+              '${(_jar.target * 1.25).round()} for ★★, ${(_jar.target * 1.5).round()} for ★★★. '
               '${switch (_jar) {
                 JarSize.wide => 'A wide jar to learn in.',
                 JarSize.standard => 'The classic jar.',
@@ -83,27 +84,31 @@ class FruitDropGameScreen extends StatelessWidget {
         onComplete: (outcome) {
           final result = outcome.result;
           final won = result.outcome == MatchOutcome.p1Win;
-          Navigator.of(context).pushReplacement(
+          // Held now, while this screen is still mounted. PLAY AGAIN runs
+          // after the result screen has replaced this one, and looking the
+          // navigator up from this context then throws.
+          final navigator = Navigator.of(context);
+          navigator.pushReplacement(
             MaterialPageRoute<void>(
               builder: (_) => ResultScreen(
                 result: result,
                 replay: outcome.replay,
-                headline: switch (outcome.endReason) {
-                  RoundEnd.targetHit => 'SWEET!',
-                  RoundEnd.jarFull => 'JAR FULL',
-                  _ => 'OUT OF DROPS',
+                headline: switch (outcome.stars) {
+                  3 => '★★★ PERFECT!',
+                  2 => '★★☆ SWEET!',
+                  1 => '★☆☆ CLEARED',
+                  _ => outcome.endReason == RoundEnd.jarFull ? 'JAR FULL' : 'SO CLOSE',
                 },
                 headlineColor: won ? const Color(0xFF3DFF6E) : FruitDropColors.accent,
                 accent: FruitDropColors.accent,
                 stats: <ResultStat>[
                   (label: 'SCORE', value: '${outcome.score}'),
                   (label: 'TARGET', value: '${config.jar.target} in ${config.jar.drops} drops'),
-                  if (outcome.dropBonus > 0)
-                    (label: 'UNUSED DROP BONUS', value: '+${outcome.dropBonus}'),
+                  (label: 'STARS', value: '${outcome.stars} / 3'),
                   (label: 'BIGGEST FRUIT', value: FruitArt.palette[outcome.biggestTier].name.toUpperCase()),
                   (label: 'MERGES · DROPS', value: '${outcome.merges} · ${outcome.drops}'),
                 ],
-                onPlayAgain: () => Navigator.of(context).pushReplacement(
+                onPlayAgain: () => navigator.pushReplacement(
                   MaterialPageRoute<void>(
                     builder: (_) => FruitDropGameScreen(config: config.rematch(result.seed)),
                   ),

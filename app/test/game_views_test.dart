@@ -53,7 +53,7 @@ void main() {
 
       // Rest a thumb on the glass, then swipe as the ball comes into the
       // hitting zone — what a player does, through the real touch layer.
-      final start = Offset(size.width * 0.6, size.height * 0.45);
+      final start = Offset(size.width * 0.25, size.height * 0.55);
       for (var ball = 0; ball < 4; ball++) {
         TestGesture? gesture;
         var swung = false;
@@ -66,7 +66,7 @@ void main() {
             if (sim.ballVelocity.x < 0 && seconds < 0.16) {
               swung = true;
               for (var s = 1; s <= 3; s++) {
-                await gesture.moveTo(start + Offset(0, size.height * 0.13 * s));
+                await gesture.moveTo(start + Offset(size.width * 0.15 * s, -size.height * 0.03 * s));
                 await tester.pump(const Duration(milliseconds: 8));
               }
             }

@@ -26,7 +26,11 @@ class SoccerGameScreen extends StatelessWidget {
         onQuit: () => Navigator.of(context).pop(),
         onComplete: (outcome) {
           final result = outcome.result;
-          Navigator.of(context).pushReplacement(
+          // Held now, while this screen is still mounted. PLAY AGAIN runs
+          // after the result screen has replaced this one, and looking the
+          // navigator up from this context then throws.
+          final navigator = Navigator.of(context);
+          navigator.pushReplacement(
             MaterialPageRoute<void>(
               builder: (_) => ResultScreen(
                 result: result,
@@ -40,10 +44,12 @@ class SoccerGameScreen extends StatelessWidget {
                 accent: PenaltyColors.turf,
                 stats: <ResultStat>[
                   (label: 'SCORE', value: '${result.p1Score} – ${result.p2Score}'),
-                  (label: 'KICKS EACH', value: '${outcome.kicksEach}'),
-                  if (!config.isTwoHuman) (label: 'YOUR SAVES', value: '${outcome.saves}'),
+                  (label: 'POINTS', value: '${outcome.points}'),
+                  (label: 'BULLSEYES', value: '${outcome.bullseyes}'),
+                  if (!config.isTwoHuman)
+                    (label: 'SAVES · CATCHES', value: '${outcome.saves} · ${outcome.catches}'),
                 ],
-                onPlayAgain: () => Navigator.of(context).pushReplacement(
+                onPlayAgain: () => navigator.pushReplacement(
                   MaterialPageRoute<void>(
                     builder: (_) => SoccerGameScreen(config: config.rematch(result.seed)),
                   ),

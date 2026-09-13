@@ -101,4 +101,51 @@ void main() {
     }
     expect(sim.p1Kicks.single, KickResult.saved);
   });
+
+  test('a goal through the bonus target is a bullseye worth more', () {
+    final sim = PenaltySimulation(seed: 8, mode: GameMode.local2P);
+    final target = sim.bonusTarget!;
+    sim.step(PenaltyInput(aim: target, power: 0.9, fire: 1));
+    // The keeper (the other human) never dives.
+    while (sim.p1Kicks.isEmpty) {
+      sim.step(const PenaltyInput(fire: 1));
+    }
+    if (sim.p1Kicks.single == KickResult.goal) {
+      expect(sim.p1Bullseyes, 1);
+      expect(sim.p1Points, greaterThanOrEqualTo(
+          PenaltySimulation.goalPoints + PenaltySimulation.bullseyePoints));
+    }
+  });
+
+  test('a keeper who dives to the right spot in time catches it', () {
+    var caught = 0;
+    for (var seed = 1; seed <= 12; seed++) {
+      final sim = PenaltySimulation(seed: seed, mode: GameMode.vsBot, botDifficulty: BotDifficulty.easy);
+      // Let the human's first kick go by.
+      sim.step(const PenaltyInput(aim: GoalPoint(5.5, 1), power: 0.5, fire: 1));
+      while (sim.shooter == PenaltySide.p1 && !sim.isComplete) {
+        sim.step(const PenaltyInput(fire: 1));
+      }
+      // The bot shoots; dive exactly where it will cross as soon as it is struck.
+      var dived = false;
+      while (sim.p2Kicks.isEmpty && !sim.isComplete) {
+        final dive = !dived && sim.phase == PenaltyPhase.flight;
+        final at = dive ? sim.predictCrossing(Goal.keeperZ) : const GoalPoint(0, 1);
+        dived = dived || dive;
+        sim.step(PenaltyInput(dive: at, diveTrigger: dive ? 1 : 0));
+      }
+      if (sim.p2Kicks.isNotEmpty && sim.p2Kicks.single == KickResult.saved && sim.lastSaveCaught) caught++;
+    }
+    expect(caught, greaterThan(3));
+  });
+
+  test('the bot keeper sways across its line before the kick', () {
+    final sim = PenaltySimulation(seed: 2, mode: GameMode.vsBot, botDifficulty: BotDifficulty.medium);
+    final xs = <double>{};
+    for (var t = 0; t < 150; t++) {
+      sim.step(const PenaltyInput());
+      xs.add((sim.keeper.x * 10).roundToDouble());
+    }
+    expect(xs.length, greaterThan(5));
+  });
 }

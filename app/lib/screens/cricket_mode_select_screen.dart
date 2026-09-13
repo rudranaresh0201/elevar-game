@@ -48,8 +48,8 @@ class _CricketModeSelectScreenState extends State<CricketModeSelectScreen> {
       startLabel: 'START MATCH',
       onStart: _start,
       howTo: const <(IconData, String)>[
-        (Icons.touch_app_rounded, 'Hold the screen — the bat points at your finger.'),
-        (Icons.north_east_rounded, 'Swing up through the ball. Faster swing, bigger hit.'),
+        (Icons.east_rounded, 'Swipe FORWARD, towards the bowler, to swing the bat.'),
+        (Icons.north_east_rounded, 'Swipe up-forward to loft it. Time it: PERFECT, EARLY or LATE.'),
         (Icons.grid_view_rounded, 'Hit the numbered walls for 1, 2, 4 or 6. Hot zone pays double.'),
         (Icons.sports_cricket_rounded, 'Miss one that hits the stumps and you\'re bowled.'),
       ],

@@ -100,7 +100,11 @@ class ShootingGameScreen extends StatelessWidget {
         onQuit: () => Navigator.of(context).pop(),
         onComplete: (outcome) {
           final result = outcome.result;
-          Navigator.of(context).pushReplacement(
+          // Held now, while this screen is still mounted. PLAY AGAIN runs
+          // after the result screen has replaced this one, and looking the
+          // navigator up from this context then throws.
+          final navigator = Navigator.of(context);
+          navigator.pushReplacement(
             MaterialPageRoute<void>(
               builder: (_) => ResultScreen(
                 result: result,
@@ -121,7 +125,7 @@ class ShootingGameScreen extends StatelessWidget {
                   (label: 'HITS · HEADSHOTS', value: '${outcome.hits} · ${outcome.headshots}'),
                   (label: 'TURNS', value: '${outcome.turns}'),
                 ],
-                onPlayAgain: () => Navigator.of(context).pushReplacement(
+                onPlayAgain: () => navigator.pushReplacement(
                   MaterialPageRoute<void>(
                     builder: (_) => ShootingGameScreen(config: config.rematch(result.seed)),
                   ),

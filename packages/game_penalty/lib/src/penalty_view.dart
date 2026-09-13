@@ -53,17 +53,26 @@ class _PenaltyViewState extends State<PenaltyView> {
       _roles[e.pointer] = role;
       _game.beginSwipe(e.localPosition);
     } else {
-      _game.tapDive(e.localPosition);
+      _roles[e.pointer] = role;
+      _game.beginKeeper(e.localPosition);
     }
   }
 
   void _move(PointerMoveEvent e) {
-    if (_roles[e.pointer] == PenaltyRole.shooter) _game.moveSwipe(e.localPosition);
+    switch (_roles[e.pointer]) {
+      case PenaltyRole.shooter:
+        _game.moveSwipe(e.localPosition);
+      case PenaltyRole.keeper:
+        _game.moveKeeper(e.localPosition);
+      case null:
+        break;
+    }
   }
 
   void _up(PointerEvent e) {
     final role = _roles.remove(e.pointer);
     if (role == PenaltyRole.shooter) _game.endSwipe(e.localPosition);
+    if (role == PenaltyRole.keeper) _game.endKeeper(e.localPosition);
   }
 
   void _cancel(PointerCancelEvent e) {
@@ -142,6 +151,7 @@ class _Hud extends StatelessWidget {
                               colour: PenaltyColors.p1,
                               kicks: sim.p1Kicks,
                               goals: sim.p1Goals,
+                              points: sim.p1Points,
                               active: sim.shooter == PenaltySide.p1,
                             ),
                             const SizedBox(height: 4),
@@ -150,6 +160,7 @@ class _Hud extends StatelessWidget {
                               colour: PenaltyColors.p2,
                               kicks: sim.p2Kicks,
                               goals: sim.p2Goals,
+                              points: sim.p2Points,
                               active: sim.shooter == PenaltySide.p2,
                             ),
                           ],
@@ -189,8 +200,11 @@ class _ScoreRow extends StatelessWidget {
     required this.colour,
     required this.kicks,
     required this.goals,
+    required this.points,
     required this.active,
   });
+
+  final int points;
 
   final String name;
   final Color colour;
@@ -217,32 +231,49 @@ class _ScoreRow extends StatelessWidget {
           width: 46,
           child: Text(name, style: ElevarType.display(16, color: colour)),
         ),
-        for (var i = 0; i < 5; i++) ...<Widget>[
-          Container(
-            width: 20,
-            height: 20,
-            margin: const EdgeInsets.only(right: 5),
-            decoration: BoxDecoration(
-              color: i < shown.length
-                  ? (shown[i] == KickResult.goal
-                      ? const Color(0xFF3DFF6E)
-                      : const Color(0xFFFF2B2B))
-                  : ElevarColors.surfaceRaised,
-              shape: BoxShape.circle,
-              border: Border.all(color: ElevarColors.ink, width: 2),
+        // The kick dots shrink to fit rather than push the score off a 320pt
+        // screen, which they did by 41 points once the points total joined
+        // the row.
+        Flexible(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                for (var i = 0; i < 5; i++)
+                  Container(
+                    width: 20,
+                    height: 20,
+                    margin: const EdgeInsets.only(right: 5),
+                    decoration: BoxDecoration(
+                      color: i < shown.length
+                          ? (shown[i] == KickResult.goal
+                              ? const Color(0xFF3DFF6E)
+                              : const Color(0xFFFF2B2B))
+                          : ElevarColors.surfaceRaised,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: ElevarColors.ink, width: 2),
+                    ),
+                    child: i < shown.length
+                        ? Icon(
+                            shown[i] == KickResult.goal
+                                ? Icons.check_rounded
+                                : Icons.close_rounded,
+                            size: 13,
+                            color: ElevarColors.ink,
+                          )
+                        : null,
+                  ),
+              ],
             ),
-            child: i < shown.length
-                ? Icon(
-                    shown[i] == KickResult.goal
-                        ? Icons.check_rounded
-                        : Icons.close_rounded,
-                    size: 13,
-                    color: ElevarColors.ink,
-                  )
-                : null,
           ),
-        ],
-        const Spacer(),
+        ),
+        const SizedBox(width: 6),
+        Text('$points', style: ElevarType.label(10, color: ElevarColors.white)),
+        const SizedBox(width: 3),
+        Text('PTS', style: ElevarType.label(7)),
+        const SizedBox(width: 8),
         Text('$goals', style: ElevarType.display(24)),
       ],
     );
@@ -269,12 +300,14 @@ class _Prompt extends StatelessWidget {
       text = '$shooter: SWIPE THE BALL · $keeper: TAP THE GOAL';
     } else if (sim.shooter == PenaltySide.p1) {
       text = sim.phase == PenaltyPhase.aim
-          ? 'YOUR KICK · SWIPE UP · CURVE IT · FLICK HARD'
+          ? 'SWIPE TO SHOOT · HIT THE TARGET FOR +150'
           : '';
     } else {
       text = sim.keeperCommitted
           ? 'YOU\'RE DIVING!'
-          : 'YOU\'RE IN GOAL · TAP WHERE TO DIVE';
+          : (sim.phase == PenaltyPhase.flight
+              ? 'SWIPE TO THE CIRCLE!'
+              : 'YOU\'RE IN GOAL · WATCH FOR THE CIRCLE');
     }
     if (text.isEmpty) return const SizedBox.shrink();
     return Container(

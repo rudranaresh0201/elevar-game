@@ -69,7 +69,7 @@ void main() {
     await shoot(tester, 'cricket_1_ready');
     TestGesture? g;
     var shotTaken = false;
-    const origin = Offset(230, 380);
+    const origin = Offset(100, 450);
     for (var f = 0; f < 400 && !shotTaken; f++) {
       final sim = game.simulation;
       if (sim.phase == WallCricketPhase.live) {
@@ -77,7 +77,7 @@ void main() {
         final secs = (sim.ballPosition.x - 446) / -sim.ballVelocity.x;
         if (sim.ballVelocity.x < 0 && secs < 0.16) {
           for (var s = 1; s <= 3; s++) {
-            await g.moveTo(origin + Offset(0, 110.0 * s));
+            await g.moveTo(origin + Offset(60.0 * s, -15.0 * s));
             await tester.pump(const Duration(milliseconds: 8));
           }
           await frames(tester, 10, 8);

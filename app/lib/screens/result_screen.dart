@@ -170,11 +170,21 @@ class _StatRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
+      // The label gives way before the value does: a long stat line on a
+      // 320pt phone overflowed rather than wrapping.
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: <Widget>[
-          Text(label, style: ElevarType.label(11)),
-          Text(value, style: ElevarType.body(15)),
+          Expanded(
+            child: Text(label, style: ElevarType.label(11), overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(width: 10),
+          Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerRight,
+              child: Text(value, style: ElevarType.body(15)),
+            ),
+          ),
         ],
       ),
     );
@@ -219,8 +229,10 @@ class _PointsCard extends StatelessWidget {
         children: <Widget>[
           Row(
             children: <Widget>[
-              Text('POINTS EARNED', style: ElevarType.label(11)),
-              const Spacer(),
+              Expanded(
+                child: Text('POINTS EARNED',
+                    style: ElevarType.label(11), overflow: TextOverflow.ellipsis),
+              ),
               Text('+${estimate.awarded}',
                   style: ElevarType.display(30, color: ElevarColors.ball)),
               const SizedBox(width: 5),
@@ -239,8 +251,10 @@ class _PointsCard extends StatelessWidget {
           const Divider(color: ElevarColors.muted, height: 22),
           Row(
             children: <Widget>[
-              Text('BALANCE', style: ElevarType.label(11)),
-              const Spacer(),
+              Expanded(
+                child: Text('BALANCE',
+                    style: ElevarType.label(11), overflow: TextOverflow.ellipsis),
+              ),
               Text('$balance',
                   style: ElevarType.display(22, color: ElevarColors.white)),
               const SizedBox(width: 4),
@@ -270,9 +284,13 @@ class _Line extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: <Widget>[
-          Text(label, style: ElevarType.body(13, color: ElevarColors.muted)),
+          Expanded(
+            child: Text(label,
+                style: ElevarType.body(13, color: ElevarColors.muted),
+                overflow: TextOverflow.ellipsis),
+          ),
+          const SizedBox(width: 8),
           Text(value, style: ElevarType.body(13)),
         ],
       ),

@@ -166,6 +166,22 @@ class _Hud extends StatelessWidget {
                     serial: game.bannerSerial,
                   ),
                 ),
+              if (game.timingAge < 1.2)
+                Align(
+                  alignment: const Alignment(0, -0.52),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: ElevarColors.ink.withValues(alpha: 0.75),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: game.timingColour, width: 3),
+                    ),
+                    child: Text(
+                      game.timingText,
+                      style: ElevarType.display(20, color: game.timingColour),
+                    ),
+                  ),
+                ),
               if (sim.ballsBowled == 0 && sim.phase != WallCricketPhase.live)
                 const Align(
                   alignment: Alignment(0, -0.05),
@@ -272,8 +288,8 @@ class _Tip extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
       ),
       child: Text(
-        'Swipe anywhere to swing the bat.\n'
-        'Time it as the ball arrives: early or late and you edge it.',
+        'Swipe FORWARD, towards the bowler, to swing.\n'
+        'Up-forward to loft it. Time it as the ball arrives.',
         textAlign: TextAlign.center,
         style: ElevarType.body(14),
       ),

@@ -28,7 +28,14 @@ class PenaltyOutcome {
     required this.replay,
     required this.kicksEach,
     required this.saves,
+    required this.points,
+    required this.bullseyes,
+    required this.catches,
   });
+
+  final int points;
+  final int bullseyes;
+  final int catches;
 
   final GameResult result;
   final List<int> replay;

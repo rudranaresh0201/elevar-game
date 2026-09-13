@@ -83,3 +83,13 @@ cricket  medium: skill 0.4 wins 15%, 0.7 wins 53%, 1.0 wins 88%   (target 1.5 ru
 penalty  medium keeper: tap on the right spot saves ~98%, a rough guess ~45%
 fruit    wide 100%, standard ~90%, narrow 13-50% for the scripted dropper
 ```
+
+## Play-test round 2 (2026-09-13)
+
+| Feedback | Change |
+|---|---|
+| PLAY AGAIN did nothing | Every game screen (all six, including ping pong and racing) built the button from a `BuildContext` that was already gone when it was pressed. The navigator is now captured before the result screen replaces the game. `app/test/play_again_test.dart` reproduces the original "deactivated widget's ancestor" error. |
+| Cricket swipe "not working properly" | Only the **forward** part of a swipe (towards the bowler, plus upward for loft) moves the bat. Every ball now says PERFECT / EARLY / LATE / TOO EARLY / TOO LATE. |
+| Football keeper still not saving; make it more interactive | When the bot shoots, a **SAVE circle** marks roughly where the ball is going, with a ring that closes as it arrives; swipe (or tap) to dive. A dive to the right spot in time is a **catch**. When you shoot, the bot keeper **sways** across its line and a **bullseye target** hangs in the goal. Style points: goal 100, bullseye +150, top corner +50, save 100, catch +250. Keeper dive height capped (a keeper could reach 3.4 m). |
+| Fruit drop targets and attempts "unrealistic" | 500 in 100 drops / 750 in 120 / 1000 in 150 (narrow jar), with Candy Crush stars at 1×, 1.25× and 1.5× the target. Reaching the target no longer ends the round. |
+| Shooting | Unchanged — "perfect". |

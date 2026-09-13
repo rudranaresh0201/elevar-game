@@ -91,7 +91,11 @@ void main() {
         await openGame(tester, 'PENALTY\nSHOOTOUT');
         expect(find.text('KICK OFF'), findsOneWidget);
 
-        // Two players carries the longest caption on the screen.
+        // Two players carries the longest caption on the screen. Scrolled to
+        // first: on a 320pt phone it is below the fold, and a blind tap there
+        // once hit KICK OFF and played a whole shootout inside this test.
+        await tester.ensureVisible(find.text('2 PLAYERS'));
+        await tester.pumpAndSettle();
         await tester.tap(find.text('2 PLAYERS'));
         await tester.pumpAndSettle();
         expect(find.text('DIFFICULTY'), findsNothing);
@@ -119,7 +123,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('HARD'));
         await tester.pumpAndSettle();
-        expect(find.textContaining('Score 500 in 70 drops'), findsOneWidget);
+        expect(find.textContaining('Score 1000 in 150 drops'), findsOneWidget);
       });
 
       testWidgets('the leaderboard lays out', (tester) async {

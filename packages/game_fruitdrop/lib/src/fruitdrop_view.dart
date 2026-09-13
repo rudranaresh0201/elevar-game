@@ -90,7 +90,7 @@ class _Hud extends StatelessWidget {
       valueListenable: game.hudRevision,
       builder: (context, _, __) {
         final sim = game.simulation;
-        final won = sim.score >= sim.jar.target;
+        final won = sim.targetReached;
         return SafeArea(
           child: Stack(
             children: <Widget>[
@@ -116,7 +116,9 @@ class _Hud extends StatelessWidget {
                     Expanded(
                       flex: 3,
                       child: _Pill(
-                        label: won ? 'TARGET HIT!' : 'SCORE / ${sim.jar.target}',
+                        label: won
+                            ? '${'★' * sim.stars}${'☆' * (3 - sim.stars)} · ${sim.stars < 3 ? 'NEXT ${(sim.target * (sim.stars == 1 ? 1.25 : 1.5)).round()}' : 'MAX'}'
+                            : 'SCORE / ${sim.target}',
                         value: '${sim.score}',
                         valueColour: won ? const Color(0xFF3DFF6E) : ElevarColors.white,
                       ),
@@ -173,8 +175,8 @@ class _Hud extends StatelessWidget {
                     ),
                     child: Text(
                       'Slide to aim, let go to drop.\n'
-                      'Merge matching fruit to score ${sim.jar.target}\n'
-                      'in ${sim.jar.drops} drops. Keep below the dashed line!',
+                      'Merge matching fruit to score ${sim.target}\n'
+                      'in ${sim.dropBudget} drops. Keep below the dashed line!',
                       textAlign: TextAlign.center,
                       style: ElevarType.body(14),
                     ),

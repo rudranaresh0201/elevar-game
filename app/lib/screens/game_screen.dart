@@ -31,7 +31,11 @@ class GameScreen extends StatelessWidget {
         onQuit: () => Navigator.of(context).pop(),
         onComplete: (outcome) {
           final result = outcome.result;
-          Navigator.of(context).pushReplacement(
+          // Held now, while this screen is still mounted. PLAY AGAIN runs
+          // after the result screen has replaced this one, and looking the
+          // navigator up from this context then throws.
+          final navigator = Navigator.of(context);
+          navigator.pushReplacement(
             MaterialPageRoute<void>(
               builder: (_) => ResultScreen(
                 result: result,
@@ -45,7 +49,7 @@ class GameScreen extends StatelessWidget {
                     value: 'FIRST TO ${config.rules.targetScore}'
                   ),
                 ],
-                onPlayAgain: () => Navigator.of(context).pushReplacement(
+                onPlayAgain: () => navigator.pushReplacement(
                   MaterialPageRoute<void>(
                     builder: (_) => GameScreen(
                       config: PongConfig(
