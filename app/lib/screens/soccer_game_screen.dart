@@ -1,32 +1,27 @@
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:game_core/game_core.dart';
-import 'package:game_soccer/game_soccer.dart';
+import 'package:game_penalty/game_penalty.dart';
 
 import 'result_screen.dart';
 
-/// Holds the live soccer match.
+/// Holds the live shootout.
 class SoccerGameScreen extends StatelessWidget {
   const SoccerGameScreen({required this.config, super.key});
 
-  final SoccerConfig config;
+  final PenaltyConfig config;
 
   String _headline(GameResult result) => switch (result.outcome) {
         MatchOutcome.p1Win => config.isTwoHuman ? 'RED WINS' : 'YOU WIN',
         MatchOutcome.p2Win => config.isTwoHuman ? 'BLUE WINS' : 'BOT WINS',
-        MatchOutcome.draw => 'DRAW',
-      };
-
-  Color _headlineColor(GameResult result) => switch (result.outcome) {
-        MatchOutcome.p1Win => SoccerColors.discP1,
-        MatchOutcome.p2Win => SoccerColors.discP2,
-        MatchOutcome.draw => ElevarColors.muted,
+        MatchOutcome.draw => 'ALL SQUARE',
       };
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SoccerView(
+      backgroundColor: PenaltyColors.sky,
+      body: PenaltyView(
         config: config,
         onQuit: () => Navigator.of(context).pop(),
         onComplete: (outcome) {
@@ -37,23 +32,20 @@ class SoccerGameScreen extends StatelessWidget {
                 result: result,
                 replay: outcome.replay,
                 headline: _headline(result),
-                headlineColor: _headlineColor(result),
-                accent: SoccerColors.turf,
+                headlineColor: switch (result.outcome) {
+                  MatchOutcome.p1Win => PenaltyColors.p1,
+                  MatchOutcome.p2Win => PenaltyColors.p2,
+                  MatchOutcome.draw => ElevarColors.muted,
+                },
+                accent: PenaltyColors.turf,
                 stats: <ResultStat>[
-                  (
-                    label: 'MATCH',
-                    value: 'FIRST TO ${config.rules.targetGoals}'
-                  ),
-                  (
-                    label: 'FINAL SCORE',
-                    value: '${result.p1Score} – ${result.p2Score}'
-                  ),
+                  (label: 'SCORE', value: '${result.p1Score} – ${result.p2Score}'),
+                  (label: 'KICKS EACH', value: '${outcome.kicksEach}'),
+                  if (!config.isTwoHuman) (label: 'YOUR SAVES', value: '${outcome.saves}'),
                 ],
                 onPlayAgain: () => Navigator.of(context).pushReplacement(
                   MaterialPageRoute<void>(
-                    builder: (_) => SoccerGameScreen(
-                      config: config.rematch(result.seed),
-                    ),
+                    builder: (_) => SoccerGameScreen(config: config.rematch(result.seed)),
                   ),
                 ),
               ),

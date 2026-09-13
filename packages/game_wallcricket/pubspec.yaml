@@ -1,0 +1,23 @@
+name: game_wallcricket
+description: The Flame renderer and touch layer for wallcricket. All presentation, no rules.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flame: ^1.38.0
+  game_core:
+    path: ../game_core
+  wallcricket_sim:
+    path: ../wallcricket_sim
+  design_system:
+    path: ../design_system
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter

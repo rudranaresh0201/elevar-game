@@ -96,13 +96,19 @@ class _ResultScreenState extends State<ResultScreen> {
                 style: ElevarType.display(44, color: widget.headlineColor),
               ),
               const SizedBox(height: 18),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  ScorePill(score: result.p1Score, color: ElevarColors.p1),
-                  const SizedBox(width: 14),
-                  ScorePill(score: result.p2Score, color: ElevarColors.p2),
-                ],
+              // Scaled down rather than overflowing: Fruit Drop scores run to
+              // four digits, and two 56pt four-digit pills are wider than a
+              // 320pt phone.
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    ScorePill(score: result.p1Score, color: ElevarColors.p1),
+                    const SizedBox(width: 14),
+                    ScorePill(score: result.p2Score, color: ElevarColors.p2),
+                  ],
+                ),
               ),
               const SizedBox(height: 22),
               Expanded(

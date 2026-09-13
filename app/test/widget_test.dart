@@ -86,11 +86,12 @@ void main() {
     testWidgets('every registry game gets a tile', (tester) async {
       await pumpApp(tester);
       for (final game in elevarGames) {
-        expect(
-          find.text(game.title),
-          findsOneWidget,
-          reason: '${game.slug} has no tile',
-        );
+        // The featured tile sets its title on one line; grid tiles keep the
+        // line break.
+        final onOneLine = game.title.replaceAll('\n', ' ');
+        final found = find.text(game.title).evaluate().length +
+            (onOneLine == game.title ? 0 : find.text(onOneLine).evaluate().length);
+        expect(found, 1, reason: '${game.slug} has no tile');
       }
     });
 

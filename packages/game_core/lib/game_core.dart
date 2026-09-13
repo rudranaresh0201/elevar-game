@@ -28,5 +28,6 @@ export 'src/fixed_loop.dart';
 export 'src/game_result.dart';
 export 'src/replay.dart';
 export 'src/rng.dart';
+export 'src/sampled_input.dart';
 export 'src/sweep.dart';
 export 'src/vec2.dart';

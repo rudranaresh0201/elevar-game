@@ -86,17 +86,40 @@ void main() {
         await tester.pumpAndSettle();
       });
 
-      testWidgets('the soccer mode select lays out', (tester) async {
+      testWidgets('the penalty shootout mode select lays out', (tester) async {
         await pumpAt(tester, entry.value);
-        await openGame(tester, 'SOCCER');
+        await openGame(tester, 'PENALTY\nSHOOTOUT');
         expect(find.text('KICK OFF'), findsOneWidget);
 
-        // Two players plus the longest match description is the tall case,
-        // and it is below the fold on a 320pt phone.
+        // Two players carries the longest caption on the screen.
         await tester.tap(find.text('2 PLAYERS'));
+        await tester.pumpAndSettle();
+        expect(find.text('DIFFICULTY'), findsNothing);
+        await tester.drag(find.text('OPPONENT'), const Offset(0, -400));
+        await tester.pumpAndSettle();
+      });
+
+      testWidgets('the shooting mode select lays out', (tester) async {
+        await pumpAt(tester, entry.value);
+        await openGame(tester, 'SHOOTING');
+        expect(find.text('START DUEL'), findsOneWidget);
+        await tester.tap(find.text('HARD'));
         await tester.pumpAndSettle();
         await tester.drag(find.text('OPPONENT'), const Offset(0, -400));
         await tester.pumpAndSettle();
+      });
+
+      testWidgets('the fruit drop mode select lays out', (tester) async {
+        await pumpAt(tester, entry.value);
+        // The newest game is the wide featured tile, which sets its title on
+        // one line.
+        await openGame(tester, 'FRUIT DROP');
+        expect(find.text('START'), findsOneWidget);
+        await tester.ensureVisible(find.text('HARD'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('HARD'));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('Target 3000'), findsOneWidget);
       });
 
       testWidgets('the leaderboard lays out', (tester) async {
@@ -120,11 +143,16 @@ void main() {
         await openGame(tester, 'CRICKET');
         expect(find.text('START MATCH'), findsOneWidget);
 
-        // CHASE is the longest description on the screen and HARD adds a
-        // second line under the opposition row, so this is the tall case.
-        await tester.tap(find.text('CHASE · 4'));
-        await tester.tap(find.text('HARD'));
+        // Both rows can be below the fold on a 320pt phone, where a tap lands
+        // on whatever is actually there — once, the START button.
+        await tester.ensureVisible(find.text('HARD'));
         await tester.pumpAndSettle();
+        await tester.tap(find.text('HARD'));
+        await tester.ensureVisible(find.text('LONG · 5'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('LONG · 5'));
+        await tester.pumpAndSettle();
+        expect(find.textContaining('Score 75 to win'), findsOneWidget);
         await tester.drag(find.text('FORMAT'), const Offset(0, -400));
         await tester.pumpAndSettle();
       });

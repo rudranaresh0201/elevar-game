@@ -4,9 +4,17 @@ A casual game hub. Games are played entirely **on one device** — two humans
 sharing a screen, or one human against a bot. The app stays online for identity,
 a single cross-game points currency, and leaderboards.
 
-**Four games are built and playable, fully offline:** soccer, cricket, car
-racing and ping pong. Points are banked in a real on-device ledger and queued
-for a server that does not exist yet.
+**Six games are built and playable, fully offline:** fruit drop, shooting
+(an archery duel), a penalty shootout, cricket (Top Spinner-style wall
+cricket), car racing and ping pong. Points are banked in a real on-device
+ledger and queued for a server that does not exist yet.
+
+> **2026-09-13:** cricket and soccer were rebuilt from scratch as new packages
+> (`wallcricket_*`, `penalty_*`) after play-testing: the old bowler-and-field
+> cricket felt mechanical and the counter soccer played like carrom. The old
+> `cricket_sim`/`game_cricket`/`soccer_sim`/`game_soccer` packages are still in
+> the workspace but no longer used by the app. See
+> [`docs/NEW_GAMES.md`](docs/NEW_GAMES.md).
 
 The app also has a **player profile** and a **leaderboard**. The board is fed by
 a webhook whose URL is compiled in at build time; with no URL it says so
@@ -39,11 +47,19 @@ packages/
   pingpong_sim/         ⭐ PURE DART — the ping pong rules and physics
   racing_sim/           ⭐ PURE DART — the racing rules, track and physics
   cricket_sim/          ⭐ PURE DART — the cricket rules, fielding and bot
-  soccer_sim/           ⭐ PURE DART — the table-soccer rules, physics and bot
+  soccer_sim/           ⭐ PURE DART — the table-soccer rules (retired)
+  wallcricket_sim/      ⭐ PURE DART — bat-and-wall cricket physics
+  penalty_sim/          ⭐ PURE DART — 3D penalty flight, keeper and bots
+  archery_sim/          ⭐ PURE DART — terrain, wind, arrows, solver bot
+  fruitdrop_sim/        ⭐ PURE DART — position-based fruit physics + merges
   game_pingpong/        Flame renderer + touch layer
   game_racing/          Flame renderer + the four-button control bands
-  game_cricket/         Flame renderer + the crease pad and the blade
-  game_soccer/          Flame renderer + the slingshot band
+  game_cricket/         Flame renderer (retired)
+  game_soccer/          Flame renderer (retired)
+  game_wallcricket/     Flame renderer: the room, the bat you hold
+  game_penalty/         Flame renderer: stadium camera, swipe-to-shoot
+  game_archery/         Flame renderer: follow camera, drag-to-aim
+  game_fruitdrop/       Flame renderer: the jar, fruit art, juice
   design_system/        colours, type, chunky controls
 docs/*.md               the plan, and one build note per game
 ```
@@ -115,21 +131,27 @@ getting the phone to show up.
 
 ```bash
 # pure Dart — fast, no device needed
-cd packages/game_core    && dart test    # 24
+cd packages/game_core    && dart test    # 26
 cd packages/pingpong_sim && dart test    # 28
 cd packages/racing_sim   && dart test    # 44
 cd packages/cricket_sim  && dart test    # 27
 cd packages/soccer_sim   && dart test    # 26
+cd packages/wallcricket_sim && dart test  #  5
+cd packages/penalty_sim  && dart test    #  7
+cd packages/archery_sim  && dart test    #  5
+cd packages/fruitdrop_sim && dart test   #  6
 
 # widget and golden tests
 cd packages/game_pingpong && flutter test  #  7
 cd packages/game_racing   && flutter test  # 17
 cd packages/game_cricket  && flutter test  # 17
 cd packages/game_soccer   && flutter test  #  7
-cd app                    && flutter test  # 66
+cd app                    && flutter test  # 84 (incl. game_views_test: the four new games played with real gestures at 320 and 390pt)
 ```
 
-263 tests, all green.
+306 tests. On 2026-09-13 the new sims, game_core, pingpong_sim, racing_sim and the app
+suite were run green; the retired cricket/soccer packages and the older widget
+packages were not re-run (their code is unchanged).
 
 ### What the tests are actually for
 

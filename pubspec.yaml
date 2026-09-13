@@ -17,3 +17,11 @@ workspace:
   - packages/game_cricket
   - packages/soccer_sim
   - packages/game_soccer
+  - packages/wallcricket_sim
+  - packages/game_wallcricket
+  - packages/penalty_sim
+  - packages/game_penalty
+  - packages/archery_sim
+  - packages/game_archery
+  - packages/fruitdrop_sim
+  - packages/game_fruitdrop

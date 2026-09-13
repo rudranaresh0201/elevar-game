@@ -1,0 +1,15 @@
+name: fruitdrop_sim
+description: The deterministic, render-free fruitdrop simulation. Runs in the app and, unchanged, in the server-side verifier.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ">=3.6.0 <4.0.0"
+
+dependencies:
+  game_core:
+    path: ../game_core
+
+dev_dependencies:
+  test: ^1.25.0
