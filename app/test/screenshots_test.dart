@@ -67,20 +67,16 @@ void main() {
     )) as WallCricketGame;
     await frames(tester, 70);
     await shoot(tester, 'cricket_1_ready');
-    TestGesture? g;
     var shotTaken = false;
-    const origin = Offset(100, 450);
-    for (var f = 0; f < 400 && !shotTaken; f++) {
+    for (var f = 0; f < 600 && !shotTaken; f++) {
       final sim = game.simulation;
-      if (sim.phase == WallCricketPhase.live) {
-        g ??= await tester.startGesture(origin);
-        final secs = (sim.ballPosition.x - 446) / -sim.ballVelocity.x;
-        if (sim.ballVelocity.x < 0 && secs < 0.16) {
-          for (var s = 1; s <= 3; s++) {
-            await g.moveTo(origin + Offset(60.0 * s, -15.0 * s));
-            await tester.pump(const Duration(milliseconds: 8));
-          }
-          await frames(tester, 10, 8);
+      if (sim.phase == WallCricketPhase.live && sim.ballVelocity.x < 0) {
+        final away = (sim.ballPosition.x - WallCricketSimulation.hitX) / -sim.ballVelocity.x;
+        if (away <= WallCricketSimulation.contactDelayTicks / WallCricketRules.tickHz) {
+          final g = await tester.startGesture(const Offset(200, 500));
+          await g.moveTo(const Offset(220, 440));
+          await g.up();
+          await frames(tester, 12, 8);
           await shoot(tester, 'cricket_2_contact');
           await frames(tester, 14, 16);
           await shoot(tester, 'cricket_3_flight');
@@ -89,7 +85,6 @@ void main() {
       }
       await tester.pump(const Duration(milliseconds: 8));
     }
-    await g?.up();
     await frames(tester, 30);
     await shoot(tester, 'cricket_4_result');
   });

@@ -288,8 +288,8 @@ class _Tip extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
       ),
       child: Text(
-        'Swipe FORWARD, towards the bowler, to swing.\n'
-        'Up-forward to loft it. Time it as the ball arrives.',
+        'TAP as the ball reaches you to swing.\n'
+        'Swipe while you tap to pick the shot: up lofts it.',
         textAlign: TextAlign.center,
         style: ElevarType.body(14),
       ),

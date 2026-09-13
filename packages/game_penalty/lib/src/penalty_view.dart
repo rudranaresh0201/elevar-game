@@ -306,7 +306,7 @@ class _Prompt extends StatelessWidget {
       text = sim.keeperCommitted
           ? 'YOU\'RE DIVING!'
           : (sim.phase == PenaltyPhase.flight
-              ? 'SWIPE TO THE CIRCLE!'
+              ? 'DRAG THE KEEPER TO THE CIRCLE!'
               : 'YOU\'RE IN GOAL · WATCH FOR THE CIRCLE');
     }
     if (text.isEmpty) return const SizedBox.shrink();

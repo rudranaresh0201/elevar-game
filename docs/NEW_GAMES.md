@@ -93,3 +93,18 @@ fruit    wide 100%, standard ~90%, narrow 13-50% for the scripted dropper
 | Football keeper still not saving; make it more interactive | When the bot shoots, a **SAVE circle** marks roughly where the ball is going, with a ring that closes as it arrives; swipe (or tap) to dive. A dive to the right spot in time is a **catch**. When you shoot, the bot keeper **sways** across its line and a **bullseye target** hangs in the goal. Style points: goal 100, bullseye +150, top corner +50, save 100, catch +250. Keeper dive height capped (a keeper could reach 3.4 m). |
 | Fruit drop targets and attempts "unrealistic" | 500 in 100 drops / 750 in 120 / 1000 in 150 (narrow jar), with Candy Crush stars at 1×, 1.25× and 1.5× the target. Reaching the target no longer ends the round. |
 | Shooting | Unchanged — "perfect". |
+
+## Play-test round 3 (2026-09-13, first real-device leaderboard run)
+
+| Found | Change |
+|---|---|
+| BOARD said "Could not reach the leaderboard" on the phone | The release APK had **no INTERNET permission** — Flutter only declares it in the debug/profile manifests. Added to `android/app/src/main/AndroidManifest.xml`, verified in the built APK with `aapt dump permissions`, guarded by `app/test/release_manifest_test.dart`. |
+| Cricket "too rigid", short balls unhittable, swipe direction restricted | Batting is now **timing-based**, like Stick Cricket: touch as the ball arrives; the swing meets the ball at whatever height it is; timing decides PERFECT / GOOD / EDGE / MISS; the swipe picks the shot in **any** direction (up lofts, forward drives, back pulls, down along the ground). Tests prove a perfect swing hits every delivery type and every direction is a shot. |
+| Keeper "should be able to save" | In flight the keeper **follows the finger** (touch to dive, drag to adjust) instead of a single committed tap. |
+
+Ladders (scripted players; timing noise ±0.03 s for sharp, ±0.13 s for casual):
+
+```
+cricket  easy casual wins 100% · medium casual 53%, good 100% · hard casual 3%, good 78%
+penalty  keeper save rate: casual ~80%, good ~95% (generous on purpose; tune after play-testing)
+```

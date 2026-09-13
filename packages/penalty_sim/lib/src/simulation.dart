@@ -256,12 +256,19 @@ class PenaltySimulation {
       phase == PenaltyPhase.aim && shooterIsHuman && _pendingShot == null;
 
   /// True while the human keeper may still commit.
+  ///
+  /// Once the ball is in the air a human keeper can keep steering: every new
+  /// touch re-aims the dive, and the keeper moves toward the latest one at dive
+  /// speed. One committed tap, with no second chance, meant a keeper who read
+  /// the shot a moment late could never recover — play-testing found saving
+  /// was close to impossible. Before the kick it is still one commitment, so
+  /// going early can still be punished.
   bool get acceptsDive =>
       keeperIsHuman &&
-      !keeperCommitted &&
-      (phase == PenaltyPhase.runUp ||
-          phase == PenaltyPhase.flight ||
-          (phase == PenaltyPhase.aim && isTwoHuman));
+      (phase == PenaltyPhase.flight ||
+          (!keeperCommitted &&
+              (phase == PenaltyPhase.runUp ||
+                  (phase == PenaltyPhase.aim && isTwoHuman))));
 
   int get aimTicksLeft =>
       phase == PenaltyPhase.aim ? _aimTimeoutTicks - _phaseTicks : 0;

@@ -184,32 +184,26 @@ class PenaltyGame extends FlameGame {
     );
   }
 
-  Offset? _keeperStart;
+  bool _keeperTouching = false;
 
-  /// A keeper's finger has landed. A swipe dives the way it points; a tap
-  /// dives to where it landed. Football Strike's keeper is a swipe, and it is
-  /// the more natural gesture — a flick toward the corner the ball is going.
+  /// A keeper's finger has landed: dive to it now. Waiting to see whether the
+  /// touch becomes a swipe cost the tenth of a second a save needs.
   void beginKeeper(Offset at) {
     if (!simulation.acceptsDive) return;
-    _keeperStart = at;
+    _keeperTouching = true;
+    _dive(at);
   }
 
+  /// While the ball is in the air the gloves follow the finger: drag to where
+  /// the save circle is and the keeper keeps adjusting toward it. That is how
+  /// the goalkeeper games people actually play on phones do it.
   void moveKeeper(Offset at) {
-    final start = _keeperStart;
-    if (start == null) return;
-    final delta = at - start;
-    if (delta.distance < 28) return;
-    // Committed as soon as the swipe reads as one: waiting for the finger to
-    // lift costs a keeper the tenth of a second the save needed.
-    _keeperStart = null;
-    _dive(start + delta * 2.4);
+    if (!_keeperTouching) return;
+    _dive(at);
   }
 
   void endKeeper(Offset at) {
-    final start = _keeperStart;
-    _keeperStart = null;
-    if (start == null) return;
-    _dive(at);
+    _keeperTouching = false;
   }
 
   void tapDive(Offset at) => _dive(at);

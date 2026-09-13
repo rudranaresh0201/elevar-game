@@ -1,6 +1,6 @@
--- Elevar Play — realtime leaderboard.
+-- Elevar Play - realtime leaderboard.
 --
--- Paste this whole file into Supabase → SQL Editor → New query → Run.
+-- Paste this whole file into Supabase -> SQL Editor -> New query -> Run.
 -- It is safe to run again: every statement is idempotent.
 --
 -- Shape:
@@ -11,9 +11,9 @@
 -- read-only to the app; the only way to write is the two functions below,
 -- which run as the signed-in (anonymous) user, can only touch that user's own
 -- rows, and refuse numbers that are obviously impossible. That stops casual
--- tampering. It does NOT stop a determined cheat with a modified APK — the
+-- tampering. It does NOT stop a determined cheat with a modified APK - the
 -- real defence is re-simulating the match replay on a server (docs/PLAN.md
--- §9) before anything on this board is exchanged for a voucher.
+-- section 9) before anything on this board is exchanged for a voucher.
 
 -- ---------------------------------------------------------------- tables ---
 

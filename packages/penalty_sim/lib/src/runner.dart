@@ -98,10 +98,13 @@ class ProxyPlayer {
     // speed, so a real 0.3 s reaction costs only 0.18 s of flight.
     final reaction = (0.42 - 0.2 * skill) * 0.6 * PenaltySimulation.tickHz;
     if (_flightTicks < reaction) return null;
+    // A person drags the gloves and keeps correcting, a few times a second.
+    if ((_flightTicks - reaction.round()) % 8 != 0) return null;
     final crossing = sim.predictCrossing(Goal.keeperZ);
-    // Judging where a ball will cross from a perspective view is never exact:
-    // even a good keeper is off by a third of a metre.
-    final error = 0.35 + 1.8 * (1 - skill);
+    // Judging where a ball will cross from a perspective view is never exact,
+    // but it gets better as the ball comes closer.
+    final flight = (Goal.spotZ - sim.ball.z) / Goal.spotZ;
+    final error = (0.35 + 1.8 * (1 - skill)) * (1 - 0.6 * flight);
     return GoalPoint(
       crossing.x + _rng.nextRange(-1, 1) * error,
       crossing.y + _rng.nextRange(-1, 1) * error * 0.5,

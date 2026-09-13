@@ -44,7 +44,7 @@ class _SoccerModeSelectScreenState extends State<SoccerModeSelectScreen> {
       howTo: const <(IconData, String)>[
         (Icons.swipe_up_rounded, 'Swipe the ball at the goal. Curve it round the keeper.'),
         (Icons.adjust_rounded, 'Hit the bullseye target for +150. Top corners +50.'),
-        (Icons.sports_handball_rounded, 'In goal, a circle shows the shot. Swipe to it to save.'),
+        (Icons.sports_handball_rounded, 'In goal, a circle shows the shot. Drag the keeper to it.'),
         (Icons.emoji_events_rounded, 'Five kicks each, then sudden death. Catches score big.'),
       ],
       children: <Widget>[

@@ -6,9 +6,9 @@ import 'arena.dart';
 
 /// How fast the machine bowls, and how many runs make a win.
 enum Pace {
-  easy(minSpeed: 900, maxSpeed: 1100, runsPerBall: 1.2, stumpsShare: 0.55),
-  medium(minSpeed: 1150, maxSpeed: 1400, runsPerBall: 1.5, stumpsShare: 0.65),
-  hard(minSpeed: 1450, maxSpeed: 1750, runsPerBall: 2.0, stumpsShare: 0.75);
+  easy(minSpeed: 900, maxSpeed: 1100, runsPerBall: 1.6, stumpsShare: 0.55),
+  medium(minSpeed: 1150, maxSpeed: 1400, runsPerBall: 2.3, stumpsShare: 0.65),
+  hard(minSpeed: 1450, maxSpeed: 1750, runsPerBall: 3.0, stumpsShare: 0.75);
 
   const Pace({
     required this.minSpeed,
@@ -85,6 +85,7 @@ class BallOutcome {
 
 enum WallCricketEventType {
   release,
+  timing,
   hit,
   edge,
   bounce,
@@ -106,35 +107,44 @@ class WallCricketEvent {
   final double value;
 }
 
+/// How well a swing was timed.
+enum ShotTiming { perfect, goodEarly, goodLate, edgeEarly, edgeLate, missEarly, missLate }
+
 /// One human input sample.
 class WallCricketInput {
-  const WallCricketInput({this.swing = 0, this.touching = false});
+  const WallCricketInput({this.direction = const Vec2(1, -0.5), this.swing = 0});
 
-  /// How far through the swing the player has dragged, 0..1: 0 is the
-  /// backlift, about 0.6 is the bat meeting a ball in front of the pads, 1 is
-  /// the follow-through.
+  /// Which way the swipe went, screen-style (y down). Read when the bat
+  /// meets the ball, so a swipe that finishes just after the tap still
+  /// chooses the shot.
+  final Vec2 direction;
+
+  /// Rising edge starts the swing.
   final double swing;
-  final bool touching;
 
   static const WallCricketInput idle = WallCricketInput();
 
   static WallCricketInput fromChannels(List<double> c) => WallCricketInput(
-        swing: c[0],
-        touching: c[1] >= 0.5,
+        direction: Vec2(c[0] * 2 - 1, c[1] * 2 - 1),
+        swing: c[2],
       );
 }
 
 /// Top Spinner cricket, as pure state.
 ///
-/// **You swing the bat.** The blade travels a real cricket arc — backlift over
-/// the shoulder, down past the back leg, through the line in front of the
-/// pads, up into the follow-through — and the drag on the screen says how far
-/// along that arc it is. Drag fast and the blade arrives fast; stop halfway
-/// and it is a block. The ball comes off with real contact physics: the
-/// blade's own velocity at the point of contact is added to the bounce.
+/// **Batting is timing.** Touch the screen as the ball arrives and the batter
+/// swings; the swing meets the ball at whatever height it is, so a bouncer
+/// and a yorker are as playable as a half-volley. How early or late the touch
+/// was decides the shot: perfect is a big hit, good is solid, a little off is
+/// an edge, well off is a miss. The swipe that follows the touch picks the
+/// shot: up to loft it, forward to drive, back to pull, down to keep it on
+/// the ground.
 ///
-/// The first version pointed the bat at the finger, which let it sweep
-/// sideways at hip height. Play-testing called it baseball, and it was.
+/// Two earlier versions made the player steer the blade into the ball with
+/// real collision physics. They were accurate and they were not fun — a
+/// short ball could simply not be reached, and a swipe in the "wrong"
+/// direction did nothing. Every mobile cricket game that people actually play
+/// works like this one now does.
 ///
 /// Runs come from the numbered wall the ball hits first. A delivery that
 /// reaches the stumps without touching the bat is bowled. Once it has touched
@@ -158,8 +168,43 @@ class WallCricketSimulation {
 
   final DeterministicRng _deliveryRng;
   final DeterministicRng _hotRng;
+  late final DeterministicRng _shotRng = DeterministicRng.stream(seed, 4);
+  final EdgeTrigger _swingEdge = EdgeTrigger();
 
-  static const int channelCount = 2;
+  /// Ticks from the touch to the bat meeting the ball: the swing's wind-up.
+  static const int contactDelayTicks = 14;
+
+  /// The whole swing animation, backlift to follow-through.
+  static const int swingTicks = 24;
+
+  /// Where the bat meets the ball.
+  static const double hitX = 400;
+
+  /// Timing windows, in seconds either side of perfect.
+  ({double perfect, double good, double edge}) get windows => switch (pace) {
+        Pace.easy => (perfect: 0.045, good: 0.1, edge: 0.14),
+        Pace.medium => (perfect: 0.035, good: 0.08, edge: 0.12),
+        Pace.hard => (perfect: 0.028, good: 0.066, edge: 0.1),
+      };
+
+  /// Chance a late edge carries to the keeper.
+  double get edgeCatchChance => switch (pace) {
+        Pace.easy => 0.2,
+        Pace.medium => 0.35,
+        Pace.hard => 0.5,
+      };
+
+  int? _swingStartTick;
+  int? _contactTick;
+  ShotTiming? _plannedTiming;
+
+  /// The last ball's timing, for the player to learn from.
+  ShotTiming? lastTiming;
+
+  /// How far off perfect it was, seconds: positive early, negative late.
+  double lastTimingError = 0;
+
+  static const int channelCount = 3;
 
   static const int _readyTicks = 60;
   static const int _windupTicks = 54;
@@ -167,12 +212,8 @@ class WallCricketSimulation {
   static const int _deadBallTicks = 360;
   static const int _substeps = 6;
 
-  /// Fastest the blade travels along the swing, and back to the backlift when
-  /// let go, as arc fraction per tick. The whole arc is about 5.4 radians, so
-  /// 0.036 a tick is ~23 rad/s — a full swing in about a quarter second,
-  /// which is what makes a late swing late. At 0.058 the blade got there from
-  /// the backlift after the ball had passed the hitting point, and still hit.
-  static const double _swingRate = 0.036;
+  /// How fast the bat eases back up to the backlift between balls, as arc
+  /// fraction per tick.
   static const double _returnRate = 0.012;
 
   /// The swing, as blade directions from backlift to follow-through (y down,
@@ -268,8 +309,10 @@ class WallCricketSimulation {
     _phaseTicks++;
 
     final previousTip = batTip;
+    if (_swingEdge.rising(input.swing)) _startSwing();
+    if (_contactTick != null && tick == _contactTick) _contact(input.direction);
     batPrevious = batDirection;
-    batDirection = _turnBat(input);
+    batDirection = _batPose();
 
     switch (phase) {
       case WallCricketPhase.ready:
@@ -293,30 +336,128 @@ class WallCricketSimulation {
     if (tick >= _maxTicks && !isComplete) _complete();
   }
 
-  Vec2 _turnBat(WallCricketInput input) {
-    final ballInPlay = phase == WallCricketPhase.live;
-    double target;
-    double rate;
-    if (input.touching) {
-      target = clampD(input.swing, 0, 1);
-      rate = _swingRate;
-    } else if (ballInPlay) {
-      // Let go mid-ball: the blade stays where the swing left it. Drifting
-      // back down the arc would sweep through the line again and block a
-      // ball the swing had already missed — which made every ball a hit.
-      target = swing;
-      rate = 0;
-    } else {
-      // Between balls, back up to the backlift, ready for the next one.
-      target = 0;
-      rate = _returnRate;
-    }
-    if (target > swing) {
-      swing = target - swing > rate ? swing + rate : target;
-    } else if (target < swing) {
-      swing = swing - target > rate ? swing - rate : target;
+  /// The bat follows the swing's clock once a swing starts, and eases back up
+  /// to the backlift between balls.
+  Vec2 _batPose() {
+    final start = _swingStartTick;
+    if (start != null) {
+      swing = clampD((tick - start) / swingTicks, 0, 1);
+    } else if (swing > 0) {
+      swing = swing > _returnRate * 3 ? swing - _returnRate * 3 : 0;
     }
     return _constrain(arcDirection(swing));
+  }
+
+  void _startSwing() {
+    if (phase != WallCricketPhase.live || !ballVisible || _resolved || _ballHit) return;
+    if (_swingStartTick != null) return;
+    _swingStartTick = tick;
+    _contactTick = tick + contactDelayTicks;
+
+    final arrival = _ticksUntilBallAt(hitX);
+    final error = arrival == null ? -1.0 : (arrival - contactDelayTicks) / WallCricketRules.tickHz;
+    lastTimingError = error;
+    final w = windows;
+    final early = error > 0;
+    final off = error.abs();
+    _plannedTiming = off <= w.perfect
+        ? ShotTiming.perfect
+        : off <= w.good
+            ? (early ? ShotTiming.goodEarly : ShotTiming.goodLate)
+            : off <= w.edge
+                ? (early ? ShotTiming.edgeEarly : ShotTiming.edgeLate)
+                : (early ? ShotTiming.missEarly : ShotTiming.missLate);
+  }
+
+  /// Ticks until the ball, as it is now, reaches [x]. Null if it will not —
+  /// already past, or dead.
+  int? _ticksUntilBallAt(double x) {
+    var p = ballPosition;
+    var v = ballVelocity;
+    var bounced = _bounced;
+    if (p.x <= x) return null;
+    const dt = 1 / (WallCricketRules.tickHz * _substeps);
+    for (var t = 1; t <= WallCricketRules.tickHz * 3; t++) {
+      for (var sub = 0; sub < _substeps; sub++) {
+        v = Vec2(v.x, v.y + Arena.gravity * dt);
+        p = p + v * dt;
+        if (p.y > Arena.groundY - Arena.ballRadius && v.y > 0) {
+          p = Vec2(p.x, Arena.groundY - Arena.ballRadius);
+          v = Vec2(v.x * Arena.groundFriction,
+              -v.y * (bounced ? Arena.groundRestitution : pitchBounce));
+          bounced = true;
+        }
+      }
+      if (p.x <= x) return t;
+    }
+    return null;
+  }
+
+  /// The bat reaches the ball, or where the ball should have been.
+  void _contact(Vec2 swipe) {
+    final timing = _plannedTiming;
+    _contactTick = null;
+    if (timing == null || _resolved || _ballHit) return;
+    lastTiming = timing;
+    pendingEvents.add(WallCricketEvent(WallCricketEventType.timing,
+        at: ballPosition, value: timing.index.toDouble()));
+
+    switch (timing) {
+      case ShotTiming.missEarly || ShotTiming.missLate:
+        return;
+      case ShotTiming.edgeEarly:
+        // Off the toe: it dies in front of the batter.
+        _markHit(edge: true);
+        ballVelocity = const Vec2(320, -380);
+      case ShotTiming.edgeLate:
+        _markHit(edge: true);
+        if (_shotRng.chance(edgeCatchChance)) {
+          _resolve(const BallOutcome.out(caught: true));
+          return;
+        }
+        // Thick inside edge, fine behind: usually a single off the back wall.
+        ballVelocity = const Vec2(-620, -1100);
+      case ShotTiming.perfect || ShotTiming.goodEarly || ShotTiming.goodLate:
+        final perfect = timing == ShotTiming.perfect;
+        _markHit(edge: false);
+        final direction = _shotDirection(swipe, spread: perfect ? 0.03 : 0.22);
+        ballVelocity = direction * (perfect ? 3700 : 2000);
+        pendingEvents.add(WallCricketEvent(WallCricketEventType.hit,
+            at: ballPosition, value: perfect ? 1 : 0.55));
+    }
+    if (ballPosition.y > Arena.groundY - Arena.ballRadius - 1) {
+      ballPosition = Vec2(ballPosition.x, Arena.groundY - Arena.ballRadius - 1);
+    }
+  }
+
+  void _markHit({required bool edge}) {
+    _ballHit = true;
+    hits++;
+    if (edge) {
+      edges++;
+      pendingEvents.add(WallCricketEvent(WallCricketEventType.edge, at: ballPosition));
+    }
+  }
+
+  /// Which shot a swipe asks for. Every direction is a shot.
+  Vec2 _shotDirection(Vec2 swipe, {required double spread}) {
+    var d = swipe.lengthSquared < 0.01 ? const Vec2(1, -0.5) : swipe.normalized;
+    final up = d.y < 0 ? -d.y : 0.0;
+    final down = d.y > 0 ? d.y : 0.0;
+    Vec2 launch;
+    if (down > up && down > d.x.abs() * 0.8) {
+      // Down: kept on the ground, a firm drive into the wall.
+      launch = const Vec2(1, -0.14);
+    } else if (d.x < -0.3) {
+      // Back: the pull, up and over towards the far corner of the roof.
+      launch = const Vec2(0.4, -1);
+    } else {
+      // Forward to up: the steeper the swipe, the higher it goes.
+      launch = Vec2(1, -(0.2 + 1.25 * up));
+    }
+    d = launch.normalized;
+    final jitter = _shotRng.nextRange(-spread, spread);
+    return Vec2(d.x, d.y + jitter).normalized;
   }
 
   /// Keeps the blade out of the ground: at the bottom of the arc it scrapes
@@ -348,6 +489,9 @@ class WallCricketSimulation {
     _ticksSinceHit = 0;
     _ticksLive = 0;
     _bounced = false;
+    _swingStartTick = null;
+    _contactTick = null;
+    _plannedTiming = null;
     _enter(WallCricketPhase.live);
     pendingEvents.add(
       const WallCricketEvent(
@@ -423,16 +567,9 @@ class WallCricketSimulation {
 
     const dt = 1 / (WallCricketRules.tickHz * _substeps);
     for (var s = 1; s <= _substeps; s++) {
-      final t = s / _substeps;
-      final batNow = (batPrevious + (batDirection - batPrevious) * t).normalized;
-      final batBefore =
-          (batPrevious + (batDirection - batPrevious) * ((s - 1) / _substeps))
-              .normalized;
-
       ballVelocity = Vec2(ballVelocity.x, ballVelocity.y + Arena.gravity * dt);
       ballPosition = ballPosition + ballVelocity * dt;
 
-      if (phase == WallCricketPhase.live) _collideBat(batNow, batBefore, dt);
       _collideRoom();
       if (phase == WallCricketPhase.live) _checkStumps();
     }
@@ -449,82 +586,6 @@ class WallCricketSimulation {
             resting ||
             _ticksLive > _deadBallTicks)) {
       _resolve(const BallOutcome.dot());
-    }
-  }
-
-  void _collideBat(Vec2 batNow, Vec2 batBefore, double dt) {
-    // Only a blade in front of the batter plays the ball. The backlift and
-    // the backswing pass over the stumps, and letting them collide turned a
-    // late swing into a guard that nothing could get past.
-    if (batNow.x < 0.05) return;
-    // Past the front pad is too late to play. Without this a swing started
-    // after the ball had gone through the hitting zone still caught it on the
-    // way to the stumps, and lateness cost nothing.
-    if (ballPosition.x < Arena.pivot.x + Arena.lateLine) return;
-    final axis = batNow * Arena.batLength;
-    final rel = ballPosition - Arena.pivot;
-    var along = rel.dot(batNow);
-    final bladeStart = Arena.batLength * Arena.bladeFrom;
-    if (along < bladeStart) along = bladeStart;
-    if (along > Arena.batLength) along = Arena.batLength;
-    final closest = Arena.pivot + batNow * along;
-    final offset = ballPosition - closest;
-    final reach = Arena.ballRadius + Arena.batRadius;
-    final distanceSq = offset.lengthSquared;
-    if (distanceSq >= reach * reach) return;
-
-    final distance = offset.length;
-    final normal = distance > 1e-6
-        ? offset / distance
-        : Vec2(-axis.y, axis.x).normalized;
-
-    final batVelocity = (batNow - batBefore) * (along / dt);
-    final relative = ballVelocity - batVelocity;
-    final approach = relative.dot(normal);
-
-    ballPosition = closest + normal * (reach + 0.5);
-    if (approach >= 0) return;
-
-    final fraction = along / Arena.batLength;
-    final sweet = fraction >= Arena.sweetFrom && fraction <= Arena.sweetTo;
-    // Where on the blade the ball lands is what timing buys. Swing early and
-    // the ball is met out at the toe; late, and it is cramped against the
-    // handle. Either is an edge: most of the ball's own pace carries on past
-    // the bat, and if it carries on *backwards* the keeper takes it.
-    final edge = fraction < Arena.edgeInside || fraction > Arena.edgeToe;
-    Vec2 velocity;
-    if (edge) {
-      velocity = ballVelocity * 0.6 - normal * (0.5 * approach);
-    } else {
-      final restitution = sweet ? 0.82 : 0.42;
-      velocity = ballVelocity - normal * ((1 + restitution) * approach);
-    }
-    if (velocity.length > Arena.maxBallSpeed) {
-      velocity = velocity.withLength(Arena.maxBallSpeed);
-    }
-    ballVelocity = velocity;
-
-    if (!_ballHit) {
-      _ballHit = true;
-      hits++;
-      if (edge) {
-        edges++;
-        pendingEvents.add(
-          WallCricketEvent(WallCricketEventType.edge, at: closest),
-        );
-        if (velocity.x < 0 && !_resolved) {
-          _resolve(const BallOutcome.out(caught: true));
-          return;
-        }
-      }
-      final intensity = velocity.length / Arena.maxBallSpeed;
-      pendingEvents.add(
-        WallCricketEvent(
-          WallCricketEventType.hit,
-          at: closest,
-          value: sweet ? (intensity < 1 ? intensity : 1) : intensity * 0.5,
-        ),
-      );
     }
   }
 
@@ -614,6 +675,13 @@ class WallCricketSimulation {
 
   void _resolve(BallOutcome outcome) {
     _resolved = true;
+    // A swing whose contact moment never came (the ball was bowled first).
+    if (_contactTick != null && _plannedTiming != null) {
+      lastTiming = _plannedTiming;
+      pendingEvents.add(WallCricketEvent(WallCricketEventType.timing,
+          at: ballPosition, value: _plannedTiming!.index.toDouble()));
+      _contactTick = null;
+    }
     lastOutcome = outcome;
     ballsBowled++;
     switch (outcome.kind) {
@@ -654,6 +722,8 @@ class WallCricketSimulation {
       );
     }
     ballVisible = false;
+    _swingStartTick = null;
+    _contactTick = null;
     _enter(WallCricketPhase.ready);
   }
 

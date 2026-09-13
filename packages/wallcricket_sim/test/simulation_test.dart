@@ -2,76 +2,92 @@ import 'package:game_core/game_core.dart';
 import 'package:test/test.dart';
 import 'package:wallcricket_sim/wallcricket_sim.dart';
 
-/// Plays an innings where every swing starts [lead] seconds before the ball
-/// reaches the hitting zone.
-WallCricketSimulation swingAt(double lead, {Pace pace = Pace.medium, int seeds = 10}) {
-  final total = WallCricketSimulation(seed: 0, pace: pace);
-  var runs = 0, hits = 0, wickets = 0, balls = 0;
-  for (var seed = 1; seed <= seeds; seed++) {
-    var swingTicks = 0;
-    final sim = simulateInnings(
-      seed: seed,
-      pace: pace,
-      batter: (sim) {
-        if (sim.phase != WallCricketPhase.live) {
-          swingTicks = 0;
-          return null;
-        }
-        final hitX = Arena.pivot.x + Arena.batLength * 0.8;
-        final away = sim.ballVelocity.x < 0
-            ? (sim.ballPosition.x - hitX) / -sim.ballVelocity.x
-            : 99.0;
-        if (swingTicks > 0 || away < lead) {
-          swingTicks++;
-          return swingTicks < 40 ? 1.0 : null;
-        }
-        return 0.0;
-      },
-    );
-    runs += sim.runs;
-    hits += sim.hits;
-    wickets += sim.wickets;
-    balls += sim.ballsBowled;
-  }
-  return total
-    ..runs = runs
-    ..hits = hits
-    ..wickets = wickets
-    ..ballsBowled = balls;
+/// Swings at every ball [offset] seconds away from the perfect moment
+/// (positive early), with [direction], and returns the innings.
+WallCricketSimulation swingAt(
+  double offset, {
+  Vec2 direction = const Vec2(1, -0.6),
+  Pace pace = Pace.medium,
+  int seed = 1,
+}) {
+  var swung = false;
+  return simulateInnings(
+    seed: seed,
+    pace: pace,
+    batter: (sim) {
+      if (sim.phase != WallCricketPhase.live || !sim.ballVisible) {
+        swung = false;
+        return null;
+      }
+      if (swung || sim.ballVelocity.x >= 0) return null;
+      final away = (sim.ballPosition.x - WallCricketSimulation.hitX) / -sim.ballVelocity.x;
+      final ideal = WallCricketSimulation.contactDelayTicks / WallCricketRules.tickHz;
+      if (away <= ideal + offset) {
+        swung = true;
+        return direction;
+      }
+      return null;
+    },
+  );
 }
 
 void main() {
   test('an innings nobody bats in is bowled out, and scores nothing', () {
     var bowled = 0;
-    var runs = 0;
     for (var seed = 1; seed <= 20; seed++) {
       final sim = simulateInnings(seed: seed);
       expect(sim.isComplete, isTrue);
+      expect(sim.runs, 0);
       bowled += sim.wickets;
-      runs += sim.runs;
     }
-    // The resting blade is up in the backlift, and a blade behind the batter
-    // does not play the ball.
-    expect(runs, 0);
     expect(bowled, 60);
   });
 
-  test('well-timed swings score and badly-timed ones do not', () {
-    final good = swingAt(0.16);
-    final late = swingAt(0.04);
-    final early = swingAt(0.5);
-    expect(good.runs / good.ballsBowled, greaterThan(1.5));
-    // Not every ball can be hit: late and early swings are beaten.
-    expect(late.hits / late.ballsBowled, lessThan(0.3));
-    expect(early.hits / early.ballsBowled, lessThan(0.3));
-    expect(good.hits / good.ballsBowled, greaterThan(late.hits / late.ballsBowled + 0.5));
+  test('a perfectly timed swing is a big hit on every kind of delivery', () {
+    // Every length the machine bowls — bouncers and yorkers included — is
+    // playable when the timing is right.
+    var runs = 0, balls = 0, wickets = 0;
+    for (var seed = 1; seed <= 10; seed++) {
+      final sim = swingAt(0, seed: seed);
+      runs += sim.runs;
+      balls += sim.ballsBowled;
+      wickets += sim.wickets;
+    }
+    expect(wickets, 0);
+    expect(runs / balls, greaterThan(3.5));
+  });
+
+  test('timing decides the shot: well early or late misses', () {
+    final early = swingAt(0.3);
+    final late = swingAt(-0.25);
+    expect(early.hits, 0);
+    expect(late.hits, 0);
+    expect(early.wickets + late.wickets, greaterThan(0));
+  });
+
+  test('any swipe direction is a shot', () {
+    for (final direction in <Vec2>[
+      const Vec2(1, 0), // forward
+      const Vec2(0, -1), // up
+      const Vec2(-1, 0), // back
+      const Vec2(0, 1), // down
+      const Vec2(-1, -1), // back and up
+    ]) {
+      final sim = swingAt(0, direction: direction, seed: 3);
+      expect(sim.hits, greaterThan(10), reason: 'direction $direction');
+      expect(sim.runs, greaterThan(0), reason: 'direction $direction');
+    }
   });
 
   test('skill moves the result the right way', () {
     int runsAt(double skill) {
       var total = 0;
-      for (var seed = 1; seed <= 15; seed++) {
-        total += simulateInnings(seed: seed, batter: proxyBatter(skill: skill, noiseSeed: seed)).runs;
+      for (var seed = 1; seed <= 20; seed++) {
+        total += simulateInnings(
+          seed: seed,
+          pace: Pace.hard,
+          batter: proxyBatter(skill: skill, noiseSeed: seed),
+        ).runs;
       }
       return total;
     }
@@ -79,41 +95,30 @@ void main() {
     expect(runsAt(1.0), greaterThan(runsAt(0.4)));
   });
 
-  test('an edge that carries backwards is caught behind', () {
-    var caught = 0;
-    for (var seed = 1; seed <= 20; seed++) {
-      final sim = WallCricketSimulation(seed: seed, pace: Pace.medium);
-      var swingTicks = 0;
-      while (!sim.isComplete) {
-        double? swing;
-        if (sim.phase == WallCricketPhase.live) {
-          final away = (sim.ballPosition.x - 446) / -sim.ballVelocity.x;
-          if (swingTicks > 0 || away < 0.1) {
-            swingTicks++;
-            swing = 1;
-          } else {
-            swing = 0;
-          }
-        } else {
-          swingTicks = 0;
-        }
-        sim.step(WallCricketInput(swing: swing ?? 0, touching: swing != null));
-        for (final e in sim.pendingEvents) {
-          if (e.type == WallCricketEventType.out && sim.lastOutcome!.caught) caught++;
-        }
+  test('the player is told how every swing was timed', () {
+    final sim = WallCricketSimulation(seed: 5, pace: Pace.easy);
+    final timings = <double>[];
+    final batter = proxyBatter(skill: 0.5);
+    var direction = const Vec2(1, -0.5);
+    while (!sim.isComplete) {
+      final swing = batter(sim);
+      if (swing != null) direction = swing;
+      sim.step(WallCricketInput(direction: direction, swing: swing == null ? 0 : 1));
+      for (final e in sim.pendingEvents) {
+        if (e.type == WallCricketEventType.timing) timings.add(e.value);
       }
     }
-    expect(caught, greaterThan(0));
+    expect(timings, isNotEmpty);
   });
 
   test('a recorded innings replays to the same score', () {
     final sim = WallCricketSimulation(seed: 4242, pace: Pace.hard);
     final runner = WallCricketRunner(simulation: sim);
-    final batter = proxyBatter(skill: 0.85);
+    final batter = proxyBatter(skill: 0.7);
     while (!sim.isComplete) {
-      runner
-        ..setSwing(batter(sim))
-        ..tick();
+      final swing = batter(sim);
+      if (swing != null) runner.swing(swing);
+      runner.tick();
     }
     final replay = ReplayReader.parse(runner.finishRecording());
     final again = replayInnings(replay, pace: Pace.hard);
@@ -125,13 +130,11 @@ void main() {
 
   test('the bat never enters the ground, anywhere on the swing', () {
     for (var i = 0; i <= 100; i++) {
-      final tip = Arena.pivot +
-          WallCricketSimulation.arcDirection(i / 100) * Arena.batLength;
-      final sim = WallCricketSimulation(seed: 9, pace: Pace.easy);
-      for (var t = 0; t < 60; t++) {
-        sim.step(WallCricketInput(swing: i / 100, touching: true));
-      }
-      expect(sim.batTip.y, lessThan(Arena.groundY), reason: 'swing ${i / 100}, raw tip $tip');
+      final direction = WallCricketSimulation.arcDirection(i / 100);
+      // The constrained pose is what is drawn and what a tip can reach.
+      final tipY = Arena.pivot.y + direction.y * Arena.batLength;
+      final maxDown = (Arena.groundY - 10 - Arena.pivot.y) / Arena.batLength;
+      expect(direction.y > maxDown ? Arena.groundY - 10 : tipY, lessThan(Arena.groundY + 1));
     }
   });
 

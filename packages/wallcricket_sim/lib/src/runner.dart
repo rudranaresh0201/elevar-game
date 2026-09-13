@@ -18,16 +18,18 @@ class WallCricketRunner {
   final WallCricketSimulation simulation;
   final SampledInput input;
 
-  /// How far through the swing the drag has reached, 0..1, or null when the
-  /// finger is off the glass.
-  void setSwing(double? swing) {
-    if (swing == null) {
-      input.set(1, 0);
-      return;
-    }
+  /// A touch: start the swing now, heading [direction] (screen-style, y down).
+  void swing(Vec2 direction) {
+    aim(direction);
+    input.pulse(2);
+  }
+
+  /// Updates the shot direction as the swipe develops, before contact.
+  void aim(Vec2 direction) {
+    final d = direction.lengthSquared < 1e-6 ? const Vec2(1, -0.5) : direction.normalized;
     input
-      ..set(0, swing)
-      ..set(1, 1);
+      ..set(0, (d.x + 1) / 2)
+      ..set(1, (d.y + 1) / 2);
   }
 
   void tick() {
@@ -59,38 +61,39 @@ WallCricketSimulation replayInnings(
 
 /// A scripted batter, for tests and for tuning the pace ladder.
 ///
-/// Waits in the backlift and starts the swing a moment before the ball
-/// reaches the hitting zone. [skill] sets how well that moment is judged;
-/// nothing else. It returns the swing fraction to hold, or null for no touch.
-double? Function(WallCricketSimulation) proxyBatter({
+/// Touches a reaction-noisy moment before the ball reaches the hitting point,
+/// with a lofted swipe. [skill] is how well that moment is judged. Returns a
+/// direction on the tick it swings, and null otherwise.
+Vec2? Function(WallCricketSimulation) proxyBatter({
   double skill = 0.8,
   int noiseSeed = 1,
 }) {
   final rng = DeterministicRng.stream(noiseSeed, 77);
-  var swingTicks = 0;
+  var swung = false;
   var lead = 0.0;
   var planned = false;
   return (sim) {
     if (sim.phase != WallCricketPhase.live || !sim.ballVisible) {
-      swingTicks = 0;
+      swung = false;
       planned = false;
       return null;
     }
+    if (swung) return null;
     if (!planned) {
       planned = true;
-      // Seconds before the ball arrives to start the swing. A person
-      // misjudges it, more so at low skill.
-      lead = 0.16 + rng.nextRange(-1, 1) * (0.015 + 0.11 * (1 - skill));
+      final ideal = WallCricketSimulation.contactDelayTicks / WallCricketRules.tickHz;
+      // A thumb on glass is never exact: even a sharp player is off by a few
+      // hundredths of a second, a casual one by a tenth or more.
+      lead = ideal + rng.nextRange(-1, 1) * (0.03 + 0.17 * (1 - skill));
     }
-    final hitX = Arena.pivot.x + Arena.batLength * 0.8;
     final secondsAway = sim.ballVelocity.x < 0
-        ? (sim.ballPosition.x - hitX) / -sim.ballVelocity.x
+        ? (sim.ballPosition.x - WallCricketSimulation.hitX) / -sim.ballVelocity.x
         : 99.0;
-    if (swingTicks > 0 || secondsAway < lead) {
-      swingTicks++;
-      return swingTicks < 40 ? 1.0 : null;
+    if (secondsAway <= lead) {
+      swung = true;
+      return Vec2(1, rng.nextRange(-1.2, 0.2));
     }
-    return 0.0;
+    return null;
   };
 }
 
@@ -118,14 +121,16 @@ WallCricketSimulation simulateInnings({
   required int seed,
   Pace pace = Pace.medium,
   WallCricketRules rules = WallCricketRules.classic,
-  double? Function(WallCricketSimulation)? batter,
+  Vec2? Function(WallCricketSimulation)? batter,
 }) {
   final simulation =
       WallCricketSimulation(seed: seed, pace: pace, rules: rules);
+  var direction = const Vec2(1, -0.5);
   while (!simulation.isComplete) {
     final swing = batter?.call(simulation);
+    if (swing != null) direction = swing;
     simulation.step(
-      WallCricketInput(swing: swing ?? 0, touching: swing != null),
+      WallCricketInput(direction: direction, swing: swing == null ? 0 : 1),
     );
   }
   return simulation;

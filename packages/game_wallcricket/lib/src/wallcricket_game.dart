@@ -104,31 +104,25 @@ class WallCricketGame extends FlameGame {
 
   Offset? _swingStart;
 
-  /// How far a forward swipe has to travel for a full swing, as a share of
-  /// the screen's width. A thumb starting mid-screen has that much room.
-  static const double fullSwingDrag = 0.42;
-
-  /// A finger has landed: the batter is in the backlift, ready.
+  /// A finger has landed: that moment is the swing's timing. Waiting for the
+  /// swipe to finish before swinging would add its whole duration to every
+  /// shot, which is exactly the lag that made the earlier versions feel
+  /// rigid. The direction follows as the finger moves, up to contact.
   void beginSwing(Offset screen) {
     _swingStart = screen;
     finger = screenToArena(screen);
-    runner.setSwing(0);
+    runner.swing(const Vec2(1, -0.5));
   }
 
-  /// The drag so far becomes how far through the swing the bat is.
-  ///
-  /// Only the **forward** part counts: toward the bowler, and up for a lofted
-  /// shot. Swipe forward and the bat comes forward with the finger; pull back
-  /// and it goes back up into the backlift. The first version counted any
-  /// direction, so a swipe down swung the bat forward too, and play-testing
-  /// found it disconnected — the bat did not go where the thumb went.
+  /// The swipe so far chooses the shot: up lofts it, forward drives it, back
+  /// pulls it, down keeps it along the ground. Any direction is a shot.
   void moveSwing(Offset screen) {
     final start = _swingStart;
     if (start == null) return;
     finger = screenToArena(screen);
     final delta = screen - start;
-    final forward = delta.dx + math.max(0.0, -delta.dy) * 0.6;
-    runner.setSwing(clampD(forward / (size.x * fullSwingDrag), 0, 1));
+    if (delta.distance < 12) return;
+    runner.aim(Vec2(delta.dx, delta.dy));
   }
 
   /// What the last ball's timing was, for the player to learn from.
@@ -145,7 +139,6 @@ class WallCricketGame extends FlameGame {
   void endSwing() {
     _swingStart = null;
     finger = null;
-    runner.setSwing(null);
   }
 
   @override
@@ -191,11 +184,10 @@ class WallCricketGame extends FlameGame {
       switch (event.type) {
         case WallCricketEventType.release:
           ballTrail.clear();
-          _hitThisBall = false;
           unawaited(HapticFeedback.selectionClick());
+        case WallCricketEventType.timing:
+          _showTiming(ShotTiming.values[event.value.round()]);
         case WallCricketEventType.hit:
-          _hitThisBall = true;
-          _timingFromContact(event.at);
           final power = event.value;
           shake = math.max(shake, 4 + power * 16);
           _burst(event.at, (8 + power * 22).round(), power, const Color(0xFFFFF4C2));
@@ -207,8 +199,6 @@ class WallCricketGame extends FlameGame {
             unawaited(HapticFeedback.mediumImpact());
           }
         case WallCricketEventType.edge:
-          _hitThisBall = true;
-          _timingFromContact(event.at);
           shake = math.max(shake, 6);
           _burst(event.at, 8, 0.4, const Color(0xFFFFFFFF));
           floaters.add(FloatingText('EDGE', event.at, const Color(0xFFFF9F1C)));
@@ -241,12 +231,10 @@ class WallCricketGame extends FlameGame {
           unawaited(HapticFeedback.heavyImpact());
           hudRevision.value++;
         case WallCricketEventType.dot:
-          if (!_hitThisBall) _timingFromMiss();
           _banner('DOT BALL', const Color(0xFF8A94A6));
           thisOver.add(const BallOutcome.dot());
           hudRevision.value++;
         case WallCricketEventType.out:
-          if (!_hitThisBall) _timingFromMiss();
           stumpsFly = 1;
           shake = 26;
           flash = 0.8;
@@ -273,27 +261,25 @@ class WallCricketGame extends FlameGame {
     }
   }
 
-  bool _hitThisBall = false;
-
-  /// Where on the blade the ball landed says how the timing was: out at the
-  /// toe is early, cramped at the handle is late.
-  void _timingFromContact(Vec2 at) {
-    final fraction = (at - Arena.pivot).length / Arena.batLength;
-    if (fraction >= Arena.edgeToe) {
-      _timing('EARLY', const Color(0xFFFFB020));
-    } else if (fraction < Arena.sweetFrom) {
-      _timing('LATE', const Color(0xFFFFB020));
-    } else {
-      _timing('PERFECT', const Color(0xFF3DFF6E));
-    }
-  }
-
-  void _timingFromMiss() {
-    final swing = simulation.swing;
-    if (swing > 0.85) {
-      _timing('TOO EARLY', const Color(0xFFFF4D4D));
-    } else if (swing > 0.1) {
-      _timing('TOO LATE', const Color(0xFFFF4D4D));
+  void _showTiming(ShotTiming timing) {
+    const green = Color(0xFF3DFF6E);
+    const amber = Color(0xFFFFB020);
+    const red = Color(0xFFFF4D4D);
+    switch (timing) {
+      case ShotTiming.perfect:
+        _timing('PERFECT!', green);
+      case ShotTiming.goodEarly:
+        _timing('GOOD · A LITTLE EARLY', green);
+      case ShotTiming.goodLate:
+        _timing('GOOD · A LITTLE LATE', green);
+      case ShotTiming.edgeEarly:
+        _timing('EARLY · EDGED', amber);
+      case ShotTiming.edgeLate:
+        _timing('LATE · EDGED', amber);
+      case ShotTiming.missEarly:
+        _timing('TOO EARLY', red);
+      case ShotTiming.missLate:
+        _timing('TOO LATE', red);
     }
   }
 

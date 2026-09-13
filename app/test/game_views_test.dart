@@ -51,30 +51,25 @@ void main() {
       final state = tester.state(find.byWidget(view));
       final game = (state as dynamic).gameForTest as WallCricketGame;
 
-      // Rest a thumb on the glass, then swipe as the ball comes into the
-      // hitting zone — what a player does, through the real touch layer.
-      final start = Offset(size.width * 0.25, size.height * 0.55);
+      // Touch as the ball arrives and flick upward: a real tap-and-swipe
+      // through the touch layer.
+      final start = Offset(size.width * 0.5, size.height * 0.6);
       for (var ball = 0; ball < 4; ball++) {
-        TestGesture? gesture;
         var swung = false;
-        for (var f = 0; f < 400; f++) {
+        for (var f = 0; f < 500; f++) {
           final sim = game.simulation;
-          if (sim.phase == WallCricketPhase.live && !swung) {
-            gesture ??= await tester.startGesture(start);
-            final hitX = Arena.pivot.x + Arena.batLength * 0.8;
-            final seconds = (sim.ballPosition.x - hitX) / -sim.ballVelocity.x;
-            if (sim.ballVelocity.x < 0 && seconds < 0.16) {
+          if (sim.phase == WallCricketPhase.live && !swung && sim.ballVelocity.x < 0) {
+            final away = (sim.ballPosition.x - WallCricketSimulation.hitX) / -sim.ballVelocity.x;
+            if (away <= WallCricketSimulation.contactDelayTicks / WallCricketRules.tickHz) {
               swung = true;
-              for (var s = 1; s <= 3; s++) {
-                await gesture.moveTo(start + Offset(size.width * 0.15 * s, -size.height * 0.03 * s));
-                await tester.pump(const Duration(milliseconds: 8));
-              }
+              final gesture = await tester.startGesture(start);
+              await gesture.moveTo(start + const Offset(20, -40));
+              await gesture.up();
             }
           }
           await tester.pump(const Duration(milliseconds: 8));
           if (sim.ballsBowled > ball) break;
         }
-        await gesture?.up();
         await frames(tester, 30);
       }
       expect(tester.takeException(), isNull);

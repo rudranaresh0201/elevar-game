@@ -48,15 +48,6 @@ abstract final class Arena {
   /// batter's hip glances off a grip nobody can see.
   static const double bladeFrom = 0.3;
 
-  /// How far in front of the hands a ball must still be for the bat to
-  /// reach it. Behind this line the batter has been beaten.
-  static const double lateLine = 170;
-
-  /// Contact nearer the handle than this, or further out than [edgeToe], is
-  /// an edge.
-  static const double edgeInside = 0.48;
-  static const double edgeToe = 0.9;
-
   /// The part of the blade that hits hardest, as a fraction of its length.
   static const double sweetFrom = 0.52;
   static const double sweetTo = 0.92;
