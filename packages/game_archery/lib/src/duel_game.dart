@@ -8,6 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'package:game_core/game_core.dart';
 
 import 'duel_scene.dart';
+import 'duel_theme.dart';
 import 'game_config.dart';
 
 /// Hosts the duel: camera, drag-to-aim, juice. No rules.
@@ -115,6 +116,28 @@ class DuelGame extends FlameGame {
   double bannerAge = 99;
   int bannerSerial = 0;
 
+  /// The world this duel is set in, from the seed.
+  late final DuelTheme theme = DuelTheme.forSeed(config.seed);
+
+  /// Leaves, dust or snow blowing across the screen, in screen fractions. The
+  /// wind indicator says a number; these make it visible.
+  final List<WindBit> windBits = <WindBit>[];
+
+  /// Per stuck arrow, how much it is still quivering, 0..1.
+  final Map<StuckArrow, double> wobble = <StuckArrow, double>{};
+
+  /// A white flash on an archer who has just been hit.
+  final Map<ArcherSide, double> hitTint = <ArcherSide, double>{
+    ArcherSide.p1: 0,
+    ArcherSide.p2: 0,
+  };
+
+  /// Real seconds of slow motion left, after a headshot. Only the wall clock
+  /// is slowed, so the replay is unaffected.
+  double slowMo = 0;
+  double punch = 0;
+  double clock = 0;
+
   final math.Random _visual = math.Random(8);
   bool _finished = false;
   double _completeDelay = 0;
@@ -128,8 +151,14 @@ class DuelGame extends FlameGame {
   void update(double dt) {
     super.update(dt);
     if (_finished) return;
+    clock += dt;
 
-    _loop.advance(dt, (_) {
+    var simDt = dt;
+    if (slowMo > 0) {
+      slowMo -= dt;
+      simDt = dt * 0.3;
+    }
+    _loop.advance(simDt, (_) {
       runner.tick();
       _react(simulation.pendingEvents);
     });
@@ -173,7 +202,8 @@ class DuelGame extends FlameGame {
     final k = 1 - math.exp(-5 * dt);
     camX += (tx - camX) * k;
     camY += (ty - camY) * k;
-    zoom += (tz - zoom) * (1 - math.exp(-3 * dt));
+    zoom += (tz + punch * 0.25 - zoom) * (1 - math.exp(-3 * dt));
+    punch *= math.pow(0.05, dt).toDouble();
   }
 
   void _react(List<DuelEvent> events) {
@@ -185,6 +215,12 @@ class DuelGame extends FlameGame {
         case DuelEventType.hit:
           final head = e.kind == HitKind.head;
           flinch[e.side!] = 1;
+          hitTint[e.side!] = 1;
+          wobble[simulation.stuck.last] = 1;
+          if (head) {
+            slowMo = 0.7;
+            punch = 1;
+          }
           shake = head ? 22 : 14;
           flash = head ? 0.55 : 0.3;
           _burst(e.at, head ? 30 : 18, const Color(0xFFFFF200));
@@ -198,7 +234,9 @@ class DuelGame extends FlameGame {
           unawaited(HapticFeedback.heavyImpact());
           hudRevision.value++;
         case DuelEventType.stuck:
-          _burst(e.at, 10, const Color(0xFF8B5A2B));
+          wobble[simulation.stuck.last] = 1;
+          _burst(e.at, 14, theme.dirt);
+          _burst(e.at, 6, theme.grass);
           shake = math.max(shake, 4);
           if (e.kind == HitKind.close) {
             floaters.add(DuelFloater('SO CLOSE!', e.at + const Vec2(0, 60),
@@ -250,6 +288,10 @@ class DuelGame extends FlameGame {
     shakeOffset = Offset(math.cos(a) * shake, math.sin(a) * shake);
     flash *= math.pow(0.02, dt).toDouble();
     flinch.updateAll((_, v) => math.max(0, v - dt * 2.5));
+    hitTint.updateAll((_, v) => math.max(0, v - dt * 3));
+    wobble.updateAll((_, v) => v * math.pow(0.01, dt).toDouble());
+    wobble.removeWhere((arrow, v) => v < 0.01 || !simulation.stuck.contains(arrow));
+    _advanceWind(dt);
 
     var hpMoved = false;
     for (final side in ArcherSide.values) {
@@ -284,11 +326,45 @@ class DuelGame extends FlameGame {
     }
   }
 
+  void _advanceWind(double dt) {
+    if (windBits.isEmpty) {
+      for (var i = 0; i < 28; i++) {
+        windBits.add(WindBit(
+          x: _visual.nextDouble(),
+          y: _visual.nextDouble(),
+          phase: _visual.nextDouble() * 6.28,
+          size: 0.6 + _visual.nextDouble() * 0.8,
+        ));
+      }
+    }
+    // Screen fractions a second: a calm day still drifts a little, a gale
+    // streams across.
+    final push = simulation.wind / DuelSimulation.maxWind;
+    final fall = theme.snowing ? 0.05 : 0.012;
+    for (final bit in windBits) {
+      bit.phase += dt * 2.4;
+      bit.x += (push * 0.45 + math.sin(bit.phase) * 0.02) * dt * bit.size;
+      bit.y += (fall + math.cos(bit.phase * 0.7) * 0.01) * dt * bit.size;
+      if (bit.x > 1.05) bit.x -= 1.1;
+      if (bit.x < -0.05) bit.x += 1.1;
+      if (bit.y > 1.02) bit.y -= 1.04;
+    }
+  }
+
   @override
   void onRemove() {
     hudRevision.dispose();
     super.onRemove();
   }
+}
+
+class WindBit {
+  WindBit({required this.x, required this.y, required this.phase, required this.size});
+
+  double x;
+  double y;
+  double phase;
+  final double size;
 }
 
 class DuelFloater {

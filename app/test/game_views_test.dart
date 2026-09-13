@@ -51,36 +51,31 @@ void main() {
       final state = tester.state(find.byWidget(view));
       final game = (state as dynamic).gameForTest as WallCricketGame;
 
-      Offset screenOf(Vec2 arena) => Offset(
-            game.fieldOrigin.dx + arena.x * game.fieldScale,
-            game.fieldOrigin.dy + arena.y * game.fieldScale,
-          );
-
-      // Track the ball with the finger held just under its line, then sweep
-      // up through it as it arrives — what a player does, through the real
-      // touch layer and the real screen transform.
+      // Rest a thumb on the glass, then swipe as the ball comes into the
+      // hitting zone — what a player does, through the real touch layer.
+      final start = Offset(size.width * 0.6, size.height * 0.45);
       for (var ball = 0; ball < 4; ball++) {
         TestGesture? gesture;
         var swung = false;
-        for (var f = 0; f < 300; f++) {
+        for (var f = 0; f < 400; f++) {
           final sim = game.simulation;
           if (sim.phase == WallCricketPhase.live && !swung) {
-            final intercept = Arena.pivot.x + Arena.batLength * 0.72;
-            final arrival = predictBallAt(sim, intercept);
-            final hold = screenOf(Vec2(intercept + 200, (arrival?.y ?? 1350) + 60));
-            gesture ??= await tester.startGesture(hold);
-            await gesture.moveTo(hold);
-            final seconds = (sim.ballPosition.x - intercept) / -sim.ballVelocity.x;
-            if (sim.ballVelocity.x < 0 && seconds < 0.05) {
+            gesture ??= await tester.startGesture(start);
+            final hitX = Arena.pivot.x + Arena.batLength * 0.8;
+            final seconds = (sim.ballPosition.x - hitX) / -sim.ballVelocity.x;
+            if (sim.ballVelocity.x < 0 && seconds < 0.16) {
               swung = true;
-              await gesture.moveTo(screenOf(const Vec2(950, 200)));
+              for (var s = 1; s <= 3; s++) {
+                await gesture.moveTo(start + Offset(0, size.height * 0.13 * s));
+                await tester.pump(const Duration(milliseconds: 8));
+              }
             }
           }
           await tester.pump(const Duration(milliseconds: 8));
           if (sim.ballsBowled > ball) break;
         }
         await gesture?.up();
-        await frames(tester, 20);
+        await frames(tester, 30);
       }
       expect(tester.takeException(), isNull);
       expect(game.simulation.ballsBowled, greaterThan(0));

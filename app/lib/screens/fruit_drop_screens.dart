@@ -46,11 +46,11 @@ class _FruitDropModeSelectScreenState extends State<FruitDropModeSelectScreen> {
       children: <Widget>[
         SetupSection(
           label: 'JAR',
-          caption: 'Target ${_jar.target} points. '
+          caption: 'Score ${_jar.target} in ${_jar.drops} drops. '
               '${switch (_jar) {
-                JarSize.wide => 'Lots of room to learn in.',
-                JarSize.standard => 'The classic size.',
-                JarSize.narrow => 'Tight. Every drop counts.',
+                JarSize.wide => 'A wide jar to learn in.',
+                JarSize.standard => 'The classic jar.',
+                JarSize.narrow => 'A narrow jar. Every drop counts.',
               }}',
           child: ChunkySegmented<JarSize>(
             options: const <JarSize, String>{
@@ -88,12 +88,18 @@ class FruitDropGameScreen extends StatelessWidget {
               builder: (_) => ResultScreen(
                 result: result,
                 replay: outcome.replay,
-                headline: won ? 'SWEET!' : 'JAR FULL',
+                headline: switch (outcome.endReason) {
+                  RoundEnd.targetHit => 'SWEET!',
+                  RoundEnd.jarFull => 'JAR FULL',
+                  _ => 'OUT OF DROPS',
+                },
                 headlineColor: won ? const Color(0xFF3DFF6E) : FruitDropColors.accent,
                 accent: FruitDropColors.accent,
                 stats: <ResultStat>[
                   (label: 'SCORE', value: '${outcome.score}'),
-                  (label: 'TARGET', value: '${config.jar.target}'),
+                  (label: 'TARGET', value: '${config.jar.target} in ${config.jar.drops} drops'),
+                  if (outcome.dropBonus > 0)
+                    (label: 'UNUSED DROP BONUS', value: '+${outcome.dropBonus}'),
                   (label: 'BIGGEST FRUIT', value: FruitArt.palette[outcome.biggestTier].name.toUpperCase()),
                   (label: 'MERGES · DROPS', value: '${outcome.merges} · ${outcome.drops}'),
                 ],

@@ -20,7 +20,12 @@ class FruitDropOutcome {
     required this.biggestTier,
     required this.merges,
     required this.drops,
+    required this.endReason,
+    required this.dropBonus,
   });
+
+  final RoundEnd? endReason;
+  final int dropBonus;
 
   final GameResult result;
   final List<int> replay;

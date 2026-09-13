@@ -102,20 +102,34 @@ class WallCricketGame extends FlameGame {
         (screen.dy - fieldOrigin.dy) / fieldScale,
       );
 
-  void setFinger(Offset? screen) {
-    if (screen == null) {
-      finger = null;
-      runner.setFinger(null);
-      return;
-    }
-    final p = screenToArena(screen);
-    finger = p;
-    runner.setFinger(
-      Vec2(
-        clampD(p.x, 0, Arena.width),
-        clampD(p.y, 0, Arena.height),
-      ),
-    );
+  Offset? _swingStart;
+
+  /// How far the drag has to travel for a full swing, as a share of the
+  /// screen's height. A third is a confident swipe with a thumb.
+  static const double fullSwingDrag = 0.34;
+
+  /// A finger has landed: the batter is in the backlift, ready.
+  void beginSwing(Offset screen) {
+    _swingStart = screen;
+    finger = screenToArena(screen);
+    runner.setSwing(0);
+  }
+
+  /// The drag so far becomes how far through the swing the bat is. Any
+  /// direction counts — a swipe down, across or diagonally all swing the bat —
+  /// so nobody has to learn which way is "right".
+  void moveSwing(Offset screen) {
+    final start = _swingStart;
+    if (start == null) return;
+    finger = screenToArena(screen);
+    final distance = (screen - start).distance;
+    runner.setSwing(clampD(distance / (size.y * fullSwingDrag), 0, 1));
+  }
+
+  void endSwing() {
+    _swingStart = null;
+    finger = null;
+    runner.setSwing(null);
   }
 
   @override
@@ -173,6 +187,11 @@ class WallCricketGame extends FlameGame {
           } else {
             unawaited(HapticFeedback.mediumImpact());
           }
+        case WallCricketEventType.edge:
+          shake = math.max(shake, 6);
+          _burst(event.at, 8, 0.4, const Color(0xFFFFFFFF));
+          floaters.add(FloatingText('EDGE', event.at, const Color(0xFFFF9F1C)));
+          unawaited(HapticFeedback.lightImpact());
         case WallCricketEventType.bounce:
           _burst(event.at, 4, event.value * 0.5, const Color(0xFFC9A36B));
         case WallCricketEventType.wall:
@@ -215,7 +234,9 @@ class WallCricketGame extends FlameGame {
             1,
             const Color(0xFFF2D16B),
           );
-          _banner('BOWLED!', const Color(0xFFFF2B2B));
+          final caught = simulation.lastOutcome?.caught ?? false;
+          if (caught) stumpsFly = 0;
+          _banner(caught ? 'CAUGHT BEHIND!' : 'BOWLED!', const Color(0xFFFF2B2B));
           thisOver.add(const BallOutcome.out());
           unawaited(HapticFeedback.vibrate());
           hudRevision.value++;

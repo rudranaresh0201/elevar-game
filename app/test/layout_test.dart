@@ -119,7 +119,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('HARD'));
         await tester.pumpAndSettle();
-        expect(find.textContaining('Target 3000'), findsOneWidget);
+        expect(find.textContaining('Score 500 in 70 drops'), findsOneWidget);
       });
 
       testWidgets('the leaderboard lays out', (tester) async {
@@ -152,7 +152,7 @@ void main() {
         await tester.pumpAndSettle();
         await tester.tap(find.text('LONG · 5'));
         await tester.pumpAndSettle();
-        expect(find.textContaining('Score 75 to win'), findsOneWidget);
+        expect(find.textContaining('Score 60 to win'), findsOneWidget);
         await tester.drag(find.text('FORMAT'), const Offset(0, -400));
         await tester.pumpAndSettle();
       });

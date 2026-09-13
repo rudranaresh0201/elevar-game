@@ -65,25 +65,24 @@ void main() {
       onComplete: (_) {},
       onQuit: () {},
     )) as WallCricketGame;
-    Offset screenOf(Vec2 a) => Offset(game.fieldOrigin.dx + a.x * game.fieldScale, game.fieldOrigin.dy + a.y * game.fieldScale);
     await frames(tester, 70);
     await shoot(tester, 'cricket_1_ready');
     TestGesture? g;
     var shotTaken = false;
+    const origin = Offset(230, 380);
     for (var f = 0; f < 400 && !shotTaken; f++) {
       final sim = game.simulation;
       if (sim.phase == WallCricketPhase.live) {
-        const intercept = 424.0;
-        final arrival = predictBallAt(sim, intercept);
-        final hold = screenOf(Vec2(intercept + 200, (arrival?.y ?? 1350) + 60));
-        g ??= await tester.startGesture(hold);
-        await g.moveTo(hold);
-        final secs = (sim.ballPosition.x - intercept) / -sim.ballVelocity.x;
-        if (sim.ballVelocity.x < 0 && secs < 0.05) {
-          await g.moveTo(screenOf(const Vec2(950, 200)));
-          await frames(tester, 3, 8);
+        g ??= await tester.startGesture(origin);
+        final secs = (sim.ballPosition.x - 446) / -sim.ballVelocity.x;
+        if (sim.ballVelocity.x < 0 && secs < 0.16) {
+          for (var s = 1; s <= 3; s++) {
+            await g.moveTo(origin + Offset(0, 110.0 * s));
+            await tester.pump(const Duration(milliseconds: 8));
+          }
+          await frames(tester, 10, 8);
           await shoot(tester, 'cricket_2_contact');
-          await frames(tester, 12, 16);
+          await frames(tester, 14, 16);
           await shoot(tester, 'cricket_3_flight');
           shotTaken = true;
         }
@@ -127,31 +126,31 @@ void main() {
     await shoot(tester, 'penalty_6_dive');
   });
 
-  testWidgets('shooting', (tester) async {
-
-    final game = await start(tester, DuelView(
-      config: const DuelConfig(mode: GameMode.vsBot, botDifficulty: BotDifficulty.medium, seed: 5),
-      onComplete: (_) {},
-      onQuit: () {},
-    )) as DuelGame;
-    await frames(tester, 90);
-    final shot = solveShot(game.simulation, from: ArcherSide.p1, at: ArcherSide.p2);
-    const origin = Offset(200, 500);
-    final pull = Offset(-shot.direction.x, shot.direction.y) * (shot.power * 390 * 0.42);
-    final gesture = await tester.startGesture(origin);
-    for (var i = 1; i <= 10; i++) {
-      await gesture.moveTo(origin + pull * (i / 10));
-      await tester.pump(const Duration(milliseconds: 16));
-    }
-    await shoot(tester, 'shooting_1_aim');
-    await gesture.up();
-    await frames(tester, 40);
-    await shoot(tester, 'shooting_2_flight');
-    await frames(tester, 200);
-    await shoot(tester, 'shooting_3_impact');
-    await frames(tester, 110);
-    await shoot(tester, 'shooting_4_bot');
-  });
+  for (final seed in <int>[3, 4, 5]) {
+    testWidgets('shooting $seed', (tester) async {
+      final game = await start(tester, DuelView(
+        config: DuelConfig(mode: GameMode.vsBot, botDifficulty: BotDifficulty.medium, seed: seed),
+        onComplete: (_) {},
+        onQuit: () {},
+      )) as DuelGame;
+      final name = game.theme.name.toLowerCase();
+      await frames(tester, 90);
+      final shot = solveShot(game.simulation, from: ArcherSide.p1, at: ArcherSide.p2);
+      const origin = Offset(200, 500);
+      final pull = Offset(-shot.direction.x, shot.direction.y) * (shot.power * 390 * 0.42);
+      final gesture = await tester.startGesture(origin);
+      for (var i = 1; i <= 10; i++) {
+        await gesture.moveTo(origin + pull * (i / 10));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      await shoot(tester, 'shooting_${name}_1_aim');
+      await gesture.up();
+      await frames(tester, 40);
+      await shoot(tester, 'shooting_${name}_2_flight');
+      await frames(tester, 150);
+      await shoot(tester, 'shooting_${name}_3_impact');
+    });
+  }
 
   testWidgets('fruit drop', (tester) async {
 
@@ -163,16 +162,17 @@ void main() {
     await frames(tester, 10);
     await shoot(tester, 'fruit_1_empty');
     final dropper = ProxyDropper(skill: 0.8, seed: 3);
-    for (var i = 0; i < 70; i++) {
+    for (var i = 0; i < 40; i++) {
       double? aim;
       for (var w = 0; w < 80 && aim == null; w++) {
         aim = dropper.dropFor(game.simulation);
         if (aim == null) await tester.pump(const Duration(milliseconds: 16));
       }
-      final x = game.jarOrigin.dx + aim! * game.simulation.width * game.jarScale;
+      if (aim == null) break;
+      final x = game.jarOrigin.dx + aim * game.simulation.width * game.jarScale;
       final gesture = await tester.startGesture(Offset(x, 400));
       await tester.pump(const Duration(milliseconds: 16));
-      if (i == 69) await shoot(tester, 'fruit_2_aiming');
+      if (i == 39) await shoot(tester, 'fruit_2_aiming');
       await gesture.up();
       await frames(tester, 4);
     }

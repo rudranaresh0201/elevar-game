@@ -114,18 +114,25 @@ class _Hud extends StatelessWidget {
                     ),
                     const SizedBox(width: 10),
                     Expanded(
+                      flex: 3,
                       child: _Pill(
-                        label: sim.jar.name.toUpperCase(),
+                        label: won ? 'TARGET HIT!' : 'SCORE / ${sim.jar.target}',
                         value: '${sim.score}',
-                        valueColour: ElevarColors.white,
+                        valueColour: won ? const Color(0xFF3DFF6E) : ElevarColors.white,
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
+                      flex: 2,
                       child: _Pill(
-                        label: won ? 'TARGET HIT' : 'TARGET',
-                        value: '${sim.jar.target}',
-                        valueColour: won ? const Color(0xFF3DFF6E) : FruitDropColors.accent,
+                        label: 'DROPS',
+                        value: '${sim.dropsLeft}',
+                        // The last few drops are where a round is won or lost,
+                        // so the count turns red while there is still time to
+                        // play them carefully.
+                        valueColour: sim.dropsLeft <= 5
+                            ? const Color(0xFFFF4D4D)
+                            : FruitDropColors.accent,
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -166,8 +173,8 @@ class _Hud extends StatelessWidget {
                     ),
                     child: Text(
                       'Slide to aim, let go to drop.\n'
-                      'Two of the same fruit merge into a bigger one.\n'
-                      'Don\'t let the pile cross the dashed line!',
+                      'Merge matching fruit to score ${sim.jar.target}\n'
+                      'in ${sim.jar.drops} drops. Keep below the dashed line!',
                       textAlign: TextAlign.center,
                       style: ElevarType.body(14),
                     ),

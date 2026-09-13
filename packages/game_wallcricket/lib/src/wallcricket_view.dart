@@ -50,20 +50,20 @@ class _WallCricketViewState extends State<WallCricketView> {
       onPointerDown: (e) {
         if (_pointer != null) return;
         _pointer = e.pointer;
-        _game.setFinger(e.localPosition);
+        _game.beginSwing(e.localPosition);
       },
       onPointerMove: (e) {
-        if (e.pointer == _pointer) _game.setFinger(e.localPosition);
+        if (e.pointer == _pointer) _game.moveSwing(e.localPosition);
       },
       onPointerUp: (e) {
         if (e.pointer != _pointer) return;
         _pointer = null;
-        _game.setFinger(null);
+        _game.endSwing();
       },
       onPointerCancel: (e) {
         if (e.pointer != _pointer) return;
         _pointer = null;
-        _game.setFinger(null);
+        _game.endSwing();
       },
       child: Stack(
         fit: StackFit.expand,
@@ -168,7 +168,7 @@ class _Hud extends StatelessWidget {
                 ),
               if (sim.ballsBowled == 0 && sim.phase != WallCricketPhase.live)
                 const Align(
-                  alignment: Alignment(0, 0.35),
+                  alignment: Alignment(0, -0.05),
                   child: _Tip(),
                 ),
             ],
@@ -272,8 +272,8 @@ class _Tip extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
       ),
       child: Text(
-        'Hold anywhere — the bat points at your finger.\n'
-        'Swing up through the ball. Hit the walls for runs.',
+        'Swipe anywhere to swing the bat.\n'
+        'Time it as the ball arrives: early or late and you edge it.',
         textAlign: TextAlign.center,
         style: ElevarType.body(14),
       ),

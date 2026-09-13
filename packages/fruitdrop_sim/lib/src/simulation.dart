@@ -1,15 +1,21 @@
 import 'package:game_core/game_core.dart';
 
-/// How hard the jar is: its width and the score that counts as a win.
+/// How hard the round is: the jar's width, the score to reach, and how many
+/// fruit you get to reach it with.
+///
+/// The first build handed out unlimited fruit, so every target fell to
+/// patience. A drop budget is what Candy Crush's move limit and Bubble
+/// Shooter's ball count are: it turns "keep going" into "every drop counts".
 enum JarSize {
-  wide(width: 700, target: 1000),
-  standard(width: 640, target: 2000),
-  narrow(width: 580, target: 3000);
+  wide(width: 700, target: 250, drops: 60),
+  standard(width: 640, target: 400, drops: 70),
+  narrow(width: 580, target: 500, drops: 70);
 
-  const JarSize({required this.width, required this.target});
+  const JarSize({required this.width, required this.target, required this.drops});
 
   final double width;
   final int target;
+  final int drops;
 
   static JarSize of(BotDifficulty d) => switch (d) {
         BotDifficulty.easy => JarSize.wide,
@@ -41,7 +47,12 @@ abstract final class Fruits {
 
   /// Two watermelons pop entirely, for this on top.
   static const int watermelonBonus = 100;
+
+  /// Paid per unused drop when the target is reached early.
+  static const int dropBonus = 10;
 }
+
+enum RoundEnd { targetHit, outOfDrops, jarFull }
 
 class Fruit {
   Fruit({
@@ -72,7 +83,7 @@ class Fruit {
   double get mass => fullRadius * fullRadius;
 }
 
-enum FruitEventType { drop, merge, pop, land, gameOver }
+enum FruitEventType { drop, merge, pop, land, targetHit, gameOver }
 
 class FruitEvent {
   const FruitEvent(this.type,
@@ -145,6 +156,14 @@ class FruitDropSimulation {
   int _nextId = 0;
   int _cooldown = 0;
   bool gameOver = false;
+  RoundEnd? endReason;
+
+  /// Points added for drops left over when the target was reached.
+  int dropBonus = 0;
+
+  /// Ticks the jar has been quiet since the round ran out of things to do.
+  int _settleTicks = 0;
+  static const int _settleLimit = 100;
 
   late int current;
   late int next;
@@ -155,7 +174,12 @@ class FruitDropSimulation {
   final List<Fruit> fruits = <Fruit>[];
   final List<FruitEvent> pendingEvents = <FruitEvent>[];
 
-  bool get canDrop => !gameOver && _cooldown == 0;
+  int get dropsLeft => jar.drops - drops;
+
+  bool get targetReached => score >= jar.target;
+
+  bool get canDrop =>
+      !gameOver && _cooldown == 0 && dropsLeft > 0 && !targetReached;
   bool get isComplete => gameOver;
 
   /// 0..1: how close the worst fruit is to ending the game.
@@ -207,10 +231,33 @@ class FruitDropSimulation {
         _solve();
       }
     }
+    final mergesBefore = merges;
+    final wasReached = targetReached;
     _merge();
+    if (!wasReached && targetReached) {
+      pendingEvents.add(FruitEvent(FruitEventType.targetHit, points: score));
+    }
     _checkDanger();
+    if (gameOver) return;
 
-    if (tick >= _maxTicks) _end();
+    // Out of fruit, or target reached: let the cascade finish, then end. A
+    // merge still happening resets the wait, so a chain that tips the score
+    // over the target in its last second still counts.
+    if ((dropsLeft == 0 || targetReached) && _cooldown == 0) {
+      _settleTicks = merges == mergesBefore ? _settleTicks + 1 : 0;
+      if (_settleTicks >= _settleLimit) {
+        if (targetReached) {
+          dropBonus = dropsLeft * Fruits.dropBonus;
+          score += dropBonus;
+          _end(RoundEnd.targetHit);
+        } else {
+          _end(RoundEnd.outOfDrops);
+        }
+        return;
+      }
+    }
+
+    if (tick >= _maxTicks) _end(RoundEnd.outOfDrops);
   }
 
   void _dropFruit() {
@@ -373,7 +420,7 @@ class FruitDropSimulation {
       if (settled && f.position.y - f.fullRadius < dangerY) {
         f.overLineTicks++;
         if (f.overLineTicks >= _overLineLimit) {
-          _end();
+          _end(RoundEnd.jarFull);
           return;
         }
       } else {
@@ -382,8 +429,9 @@ class FruitDropSimulation {
     }
   }
 
-  void _end() {
+  void _end(RoundEnd reason) {
     gameOver = true;
+    endReason = reason;
     pendingEvents.add(const FruitEvent(FruitEventType.gameOver));
   }
 

@@ -77,7 +77,6 @@ class WallCricketScene extends Component {
     _paintGround(canvas);
     _paintMachine(canvas);
     _paintStumps(canvas);
-    _paintFingerGuide(canvas);
     _paintBatter(canvas);
     _paintSwoosh(canvas);
     _paintBat(canvas);
@@ -312,27 +311,6 @@ class WallCricketScene extends Component {
     );
   }
 
-  void _paintFingerGuide(Canvas canvas) {
-    final finger = game.finger;
-    if (finger == null) return;
-    final from = Arena.pivot;
-    final direction = (finger - from).normalized;
-    final dot = Paint()..color = ElevarColors.white.withValues(alpha: 0.35);
-    for (var d = 60.0; d < 900; d += 40) {
-      final p = from + direction * d;
-      if ((p - finger).length < 30) break;
-      canvas.drawCircle(Offset(p.x, p.y), 6, dot);
-    }
-    canvas.drawCircle(
-      Offset(finger.x, finger.y),
-      34,
-      Paint()
-        ..color = ElevarColors.white.withValues(alpha: 0.5)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 6,
-    );
-  }
-
   void _paintBatter(Canvas canvas) {
     final outline = Paint()
       ..color = ElevarColors.ink
@@ -340,9 +318,12 @@ class WallCricketScene extends Component {
       ..strokeWidth = _outline
       ..strokeJoin = StrokeJoin.round;
     const hip = Offset(196, 1262);
+    final swing = game.simulation.swing;
 
-    // Legs with pads.
-    for (final foot in const <Offset>[Offset(168, 1416), Offset(246, 1416)]) {
+    // Legs with pads. The front foot strides toward the ball as the swing
+    // comes through.
+    final stride = clampD((swing - 0.3) * 1.6, 0, 1) * 44;
+    for (final foot in <Offset>[const Offset(168, 1416), Offset(246 + stride, 1416)]) {
       final leg = Path()
         ..moveTo(hip.dx - 20, hip.dy)
         ..lineTo(foot.dx - 18, foot.dy)
@@ -358,8 +339,9 @@ class WallCricketScene extends Component {
       canvas.drawRRect(shoe, Paint()..color = ElevarColors.ink);
     }
 
-    // Torso, leaning into the shot a little with the bat.
-    final lean = clampD(game.simulation.batDirection.x, -1, 1) * 10;
+    // The body goes with the swing: rocked back in the backlift, leaning
+    // over the front foot through the shot.
+    final lean = (swing - 0.35) * 34;
     final torso = RRect.fromRectAndRadius(
       Rect.fromLTWH(154 + lean, 1112, 92, 160),
       const Radius.circular(34),

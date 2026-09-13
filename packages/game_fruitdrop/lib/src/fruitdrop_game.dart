@@ -113,6 +113,8 @@ class FruitDropGame extends FlameGame {
           biggestTier: simulation.biggestTier,
           merges: simulation.merges,
           drops: simulation.drops,
+          endReason: simulation.endReason,
+          dropBonus: simulation.dropBonus,
         ));
       }
     }
@@ -150,9 +152,21 @@ class FruitDropGame extends FlameGame {
           hudRevision.value++;
         case FruitEventType.land:
           break;
+        case FruitEventType.targetHit:
+          flash = 0.6;
+          shake = 12;
+          comboText = 'TARGET HIT!';
+          comboAge = 0;
+          comboSerial++;
+          unawaited(HapticFeedback.heavyImpact());
+          hudRevision.value++;
         case FruitEventType.gameOver:
-          shake = 16;
-          comboText = 'JAR FULL';
+          shake = simulation.endReason == RoundEnd.jarFull ? 16 : 4;
+          comboText = switch (simulation.endReason) {
+            RoundEnd.targetHit => '+${simulation.dropBonus} DROP BONUS',
+            RoundEnd.jarFull => 'JAR FULL',
+            _ => 'OUT OF DROPS',
+          };
           comboAge = 0;
           comboSerial++;
           unawaited(HapticFeedback.heavyImpact());

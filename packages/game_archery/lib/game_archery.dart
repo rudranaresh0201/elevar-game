@@ -4,5 +4,6 @@ library;
 
 export 'src/duel_game.dart';
 export 'src/duel_scene.dart';
+export 'src/duel_theme.dart';
 export 'src/duel_view.dart';
 export 'src/game_config.dart';

@@ -18,16 +18,16 @@ class WallCricketRunner {
   final WallCricketSimulation simulation;
   final SampledInput input;
 
-  /// The finger, in arena units. Null when nothing is touching.
-  void setFinger(Vec2? arenaPoint) {
-    if (arenaPoint == null) {
-      input.set(2, 0);
+  /// How far through the swing the drag has reached, 0..1, or null when the
+  /// finger is off the glass.
+  void setSwing(double? swing) {
+    if (swing == null) {
+      input.set(1, 0);
       return;
     }
     input
-      ..set(0, arenaPoint.x / Arena.width)
-      ..set(1, arenaPoint.y / Arena.height)
-      ..set(2, 1);
+      ..set(0, swing)
+      ..set(1, 1);
   }
 
   void tick() {
@@ -59,17 +59,16 @@ WallCricketSimulation replayInnings(
 
 /// A scripted batter, for tests and for tuning the pace ladder.
 ///
-/// It reads the ball with a reaction delay, holds the blade low across the
-/// line, and swings up through the ball as it arrives. [skill] moves the delay
-/// and how well the swing is timed; nothing else.
-Vec2? Function(WallCricketSimulation) proxyBatter({
+/// Waits in the backlift and starts the swing a moment before the ball
+/// reaches the hitting zone. [skill] sets how well that moment is judged;
+/// nothing else. It returns the swing fraction to hold, or null for no touch.
+double? Function(WallCricketSimulation) proxyBatter({
   double skill = 0.8,
   int noiseSeed = 1,
 }) {
   final rng = DeterministicRng.stream(noiseSeed, 77);
   var swingTicks = 0;
-  var triggerGap = 0.0;
-  var heightError = 0.0;
+  var lead = 0.0;
   var planned = false;
   return (sim) {
     if (sim.phase != WallCricketPhase.live || !sim.ballVisible) {
@@ -79,27 +78,19 @@ Vec2? Function(WallCricketSimulation) proxyBatter({
     }
     if (!planned) {
       planned = true;
-      // A person misjudges both when to go and how high the ball will be.
-      // Seconds before arrival to start the swing. A blade sweeps the last
-      // stretch in about 30 ms, so a perfect batter goes just before that.
-      triggerGap = 0.03 + rng.nextRange(-1, 1) * 0.09 * (1 - skill);
-      heightError = rng.nextRange(-1, 1) * 120 * (1 - skill);
+      // Seconds before the ball arrives to start the swing. A person
+      // misjudges it, more so at low skill.
+      lead = 0.16 + rng.nextRange(-1, 1) * (0.015 + 0.11 * (1 - skill));
     }
-
-    final interceptX = Arena.pivot.x + Arena.batLength * 0.72;
-    final arrival = predictBallAt(sim, interceptX);
+    final hitX = Arena.pivot.x + Arena.batLength * 0.8;
     final secondsAway = sim.ballVelocity.x < 0
-        ? (sim.ballPosition.x - interceptX) / -sim.ballVelocity.x
+        ? (sim.ballPosition.x - hitX) / -sim.ballVelocity.x
         : 99.0;
-
-    if (swingTicks > 0 || secondsAway < triggerGap) {
+    if (swingTicks > 0 || secondsAway < lead) {
       swingTicks++;
-      // Up and through, toward the top of the far wall.
-      return swingTicks < 24 ? const Vec2(950, 200) : null;
+      return swingTicks < 40 ? 1.0 : null;
     }
-    // Ready: the blade held just under where the ball will arrive.
-    final y = (arrival?.y ?? Arena.groundY - 80) + 60 + heightError;
-    return Vec2(interceptX + 200, y);
+    return 0.0;
   };
 }
 
@@ -116,7 +107,7 @@ Vec2? predictBallAt(WallCricketSimulation sim, double x) {
     p = p + v * dt;
     if (p.y > Arena.groundY - Arena.ballRadius && v.y > 0) {
       p = Vec2(p.x, Arena.groundY - Arena.ballRadius);
-      v = Vec2(v.x * Arena.groundFriction, -v.y * Arena.groundRestitution);
+      v = Vec2(v.x * Arena.groundFriction, -v.y * sim.pitchBounce);
     }
     if (p.x <= x) return p;
   }
@@ -127,19 +118,14 @@ WallCricketSimulation simulateInnings({
   required int seed,
   Pace pace = Pace.medium,
   WallCricketRules rules = WallCricketRules.classic,
-  Vec2? Function(WallCricketSimulation)? batter,
+  double? Function(WallCricketSimulation)? batter,
 }) {
   final simulation =
       WallCricketSimulation(seed: seed, pace: pace, rules: rules);
   while (!simulation.isComplete) {
-    final finger = batter?.call(simulation);
+    final swing = batter?.call(simulation);
     simulation.step(
-      WallCricketInput(
-        finger: finger == null
-            ? null
-            : Vec2(finger.x / Arena.width, finger.y / Arena.height),
-        touching: finger != null,
-      ),
+      WallCricketInput(swing: swing ?? 0, touching: swing != null),
     );
   }
   return simulation;

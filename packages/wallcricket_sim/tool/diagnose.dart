@@ -7,7 +7,7 @@ import 'package:wallcricket_sim/wallcricket_sim.dart';
 void main() {
   for (final pace in Pace.values) {
     for (final skill in <double?>[null, 0.4, 0.7, 1.0]) {
-      var runs = 0, wickets = 0, hits = 0, balls = 0, wins = 0, secs = 0;
+      var runs = 0, wickets = 0, hits = 0, balls = 0, wins = 0, secs = 0, edges = 0;
       const n = 40;
       for (var seed = 1; seed <= n; seed++) {
         final sim = simulateInnings(
@@ -18,6 +18,7 @@ void main() {
         runs += sim.runs;
         wickets += sim.wickets;
         hits += sim.hits;
+        edges += sim.edges;
         balls += sim.ballsBowled;
         secs += sim.tick ~/ 120;
         if (sim.runs >= sim.target) wins++;
@@ -27,7 +28,7 @@ void main() {
           'runs ${(runs / n).toStringAsFixed(1)} '
           'wkts ${(wickets / n).toStringAsFixed(1)} '
           'balls ${(balls / n).toStringAsFixed(1)} '
-          'hit% ${(100 * hits / balls).round()} '
+          'hit% ${(100 * hits / balls).round()} edge% ${(100 * edges / balls).round()} '
           'win% ${(100 * wins / n).round()} '
           'secs ${secs ~/ n}');
     }

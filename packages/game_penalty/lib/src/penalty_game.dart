@@ -195,13 +195,13 @@ class PenaltyGame extends FlameGame {
     _clock += dt;
     if (_finished) return;
 
-    // A shot at a human keeper plays a touch slower in real time. The
+    // A shot at a human keeper plays at 0.6x in real time. The
     // simulation still runs the same ticks — only the wall clock stretches —
     // so it changes how it feels, not what the replay says happened.
     final slow = simulation.phase == PenaltyPhase.flight &&
         simulation.keeperIsHuman &&
         !simulation.isTwoHuman;
-    _loop.advance(slow ? dt * 0.8 : dt, (_) {
+    _loop.advance(slow ? dt * 0.6 : dt, (_) {
       final before = simulation.shooter;
       runner.tick();
       _react(simulation.pendingEvents);

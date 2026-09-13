@@ -74,11 +74,11 @@ class ShooterProfile {
 
   static ShooterProfile of(BotDifficulty d) => switch (d) {
         BotDifficulty.easy => const ShooterProfile(
-            aimError: 0.8, punishEarlyDive: 0.25, maxPower: 0.55),
+            aimError: 0.8, punishEarlyDive: 0.25, maxPower: 0.4),
         BotDifficulty.medium => const ShooterProfile(
-            aimError: 0.5, punishEarlyDive: 0.55, maxPower: 0.7),
+            aimError: 0.5, punishEarlyDive: 0.55, maxPower: 0.55),
         BotDifficulty.hard => const ShooterProfile(
-            aimError: 0.32, punishEarlyDive: 0.85, maxPower: 0.85),
+            aimError: 0.32, punishEarlyDive: 0.85, maxPower: 0.7),
       };
 }
 
@@ -160,9 +160,18 @@ class PenaltySimulation {
   static const int _regulationKicks = 5;
   static const int _maxKicks = 10;
 
-  static const double _humanDiveSpeed = 6.4;
-  static const double _keeperHalfLength = 0.85;
-  static const double _keeperRadius = 0.24;
+  /// A person in goal gets a quicker, longer dive than the bot does. They are
+  /// reacting to a ball on a phone screen through a camera, not reading a
+  /// shot in the flesh, and the first build asked them to do it at the bot's
+  /// speed: a tap on exactly the right spot still watched the ball go in.
+  static const double _humanDiveSpeed = 8.5;
+  static const double _humanHalfLength = 0.9;
+  static const double _humanRadius = 0.3;
+  static const double _botHalfLength = 0.85;
+  static const double _botRadius = 0.24;
+
+  double get _keeperHalfLength => keeperIsHuman ? _humanHalfLength : _botHalfLength;
+  double get _keeperRadius => keeperIsHuman ? _humanRadius : _botRadius;
   static const GoalPoint keeperHome = GoalPoint(0, 1.05);
 
   int tick = 0;
@@ -246,7 +255,7 @@ class PenaltySimulation {
     final dived = _diveEdge.rising(input.diveTrigger);
 
     if (dived && acceptsDive) {
-      _commitKeeper(_clampDive(input.dive), startTick: tick + 4);
+      _commitKeeper(_clampDive(input.dive), startTick: tick + 1);
     }
 
     switch (phase) {

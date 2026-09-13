@@ -65,3 +65,21 @@ flutter test test/screenshots_test.dart --update-goldens
   the biggest remaining feel upgrade.
 - **Fruit drop personal best** is not stored; the result screen shows the score.
 - Bot tuning against real players, for all four.
+
+## Play-test round 1 (2026-09-13, on a OnePlus)
+
+| Feedback | Change |
+|---|---|
+| Cricket "too much like baseball"; "not every ball should be hit" | The bat now travels a real cricket arc (backlift → down past the back leg → through the line → follow-through), driven by swipe length. Only a blade in front of the batter plays the ball; past the front pad is too late. Contact near the handle or the toe is an **edge**, and an edge that carries backwards is **caught behind**. Pitch bounce varies per ball and there are slower balls. |
+| Football: "not able to save" | A human keeper dives faster (8.5 m/s) with more reach, the bot's penalties are a touch softer, and the shot plays at 0.6× when you are in goal. |
+| Fruit drop: unlimited moves | Candy Crush-style drop budget: 250 in 60 / 400 in 70 / 500 in 70 (narrow jar). Reaching the target ends the round with +10 per unused drop. |
+| Shooting: "add some graphics" | Three seeded worlds (meadow, canyon, peaks), parallax mountains and trees, props, strata, wind-blown leaves or snow, archers with quivers and wind-blown scarves, hit flash, arrow twang, force gauge, headshot slow-mo with letterbox. |
+
+Ladders after the round (scripted players):
+
+```
+cricket  medium: skill 0.4 wins 15%, 0.7 wins 53%, 1.0 wins 88%   (target 1.5 runs/ball)
+         swing timing matters: starting 0.04 s or 0.5 s off the right moment misses most balls
+penalty  medium keeper: tap on the right spot saves ~98%, a rough guess ~45%
+fruit    wide 100%, standard ~90%, narrow 13-50% for the scripted dropper
+```
