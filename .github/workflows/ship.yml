@@ -27,6 +27,8 @@ concurrency:
 
 env:
   FLUTTER_VERSION: 3.47.1
+  # Certificate of every APK on a phone so far. Not a secret.
+  EXPECTED_SIGNER: 37:5C:9F:15:34:D0:07:3C:60:BB:03:F1:C5:8C:52:01:42:06:1C:0D:03:D9:BB:B4:C3:71:03:1D:C3:FE:0D:F0
 
 jobs:
   test:
@@ -111,12 +113,26 @@ jobs:
           KEYSTORE: ${{ secrets.ANDROID_SIGNING_KEYSTORE }}
         run: |
           printf '%s' "$ENV_JSON" > app/elevar.env.json
-          # The release build is signed with the debug config (see
-          # app/android/app/build.gradle.kts), and Gradle reads that key from
-          # here. Same key as every APK already on a phone → installs as an
-          # update, points kept.
-          mkdir -p ~/.android
-          printf '%s' "$KEYSTORE" | base64 -d > ~/.android/debug.keystore
+          # Same key as every APK already on a phone → installs as an update,
+          # points kept. build.gradle.kts signs with whatever ELEVAR_KEYSTORE
+          # points at. Whitespace is stripped in case the secret was pasted
+          # with line breaks.
+          keystore="$RUNNER_TEMP/elevar.keystore"
+          printf '%s' "$KEYSTORE" | tr -d ' \r\n' | base64 -d > "$keystore"
+          echo "ELEVAR_KEYSTORE=$keystore" >> "$GITHUB_ENV"
+
+      - name: Check it is the key the phones already have
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          # A wrong key does not fail a build — it fails on every phone, as
+          # "App not installed". So fail here instead. Fingerprints are public.
+          got=$(keytool -list -v -keystore "$ELEVAR_KEYSTORE" -storepass android -alias androiddebugkey \
+                | awk '/SHA256:/ {print $2}')
+          echo "keystore SHA-256: $got"
+          if [ "$got" != "$EXPECTED_SIGNER" ]; then
+            echo "::error::ANDROID_SIGNING_KEYSTORE is not the key the shipped APKs use ($EXPECTED_SIGNER). See docs/DEPLOY.md."
+            exit 1
+          fi
 
       - name: Configure Pages
         if: steps.gate.outputs.ready == 'true'
@@ -133,6 +149,15 @@ jobs:
           # installed one. Hand-built APKs so far were 1 and 2; start above.
           export BUILD_NUMBER=$((100 + RUN_NUMBER))
           bash deploy/build-pages.sh _site "$SITE_URL/"
+
+      - name: Check the APK is signed with that key
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          apksigner=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          got=$("$apksigner" verify --print-certs _site/elevar-play.apk | awk '/SHA-256 digest/ {print toupper($NF)}')
+          want=$(printf '%s' "$EXPECTED_SIGNER" | tr -d ':')
+          echo "apk signer: $got"
+          [ "$got" = "$want" ] || { echo "::error::APK signed with the wrong key"; exit 1; }
 
       - if: steps.gate.outputs.ready == 'true'
         uses: actions/upload-pages-artifact@v4

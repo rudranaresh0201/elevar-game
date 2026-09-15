@@ -29,11 +29,28 @@ android {
         versionName = flutter.versionName
     }
 
+    // Every APK handed out so far was signed with one developer machine's
+    // debug key (SHA-256 37:5C:9F:15…). Android only installs an update signed
+    // by the same key, so CI must sign with that exact keystore — passed by
+    // path in ELEVAR_KEYSTORE, because where AGP looks for its own debug key
+    // on a CI runner is not something to leave to chance (the first CI build
+    // silently generated a fresh one). Locally, unset, nothing changes.
+    val sharedKeystore = System.getenv("ELEVAR_KEYSTORE")?.let { file(it) }?.takeIf { it.exists() }
+    signingConfigs {
+        if (sharedKeystore != null) {
+            create("shared") {
+                storeFile = sharedKeystore
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // TODO: a real upload key before the Play Store.
+            signingConfig = signingConfigs.getByName(if (sharedKeystore != null) "shared" else "debug")
         }
     }
 }
