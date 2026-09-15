@@ -11,4 +11,11 @@ void main() {
     final manifest = File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
     expect(manifest, contains('android.permission.INTERNET'));
   });
+
+  // The label is the name under the icon on every home screen. It shipped as
+  // the package name, `elevar_play`, for a month.
+  test('the app is called Elevar Play on the home screen', () {
+    final manifest = File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
+    expect(manifest, contains('android:label="Elevar Play"'));
+  });
 }
