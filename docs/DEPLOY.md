@@ -5,11 +5,71 @@ the same URL.
 
 | | reaches | first load | caveat |
 |---|---|---|---|
-| **Web build** | anyone with a browser | ~6 MB gzipped, then cached | no sound, no haptics on iOS |
-| **APK** | Android only | 45 MB, one-time | "unknown sources" warning |
+| **Web build** | anyone with a browser — this *is* the iPhone version | ~6 MB gzipped, then cached | no sound, no haptics on iOS |
+| **APK** | Android only | ~58 MB, one-time | "unknown sources" warning |
 
 The web build is what makes a link worth sending. The APK is what somebody
 installs after they have already played once and liked it.
+
+**Why there is no iPhone app file.** An iOS build needs a Mac to compile and an
+Apple Developer account ($99/yr) before it installs on anyone's phone, and even
+then it goes out through TestFlight or the App Store, never as a file in a chat.
+The web build added to the home screen is the iPhone app until that is worth
+doing: full screen, its own icon, storage Safari does not evict.
+
+---
+
+## 0. The live link: GitHub Pages (current)
+
+`.github/workflows/ship.yml` runs on every push to `Main`: tests, then
+`deploy/build-pages.sh`, then publishes to Pages.
+
+```
+https://<owner>.github.io/elevar-game/                 landing — picks the right button per phone
+https://<owner>.github.io/elevar-game/play/            the game in a browser
+https://<owner>.github.io/elevar-game/elevar-play.apk  Android
+```
+
+One-time setup on the repo that publishes (Settings):
+
+1. **Secrets and variables → Actions → New repository secret**
+   - `ELEVAR_ENV_JSON` — the whole of `app/elevar.env.json`. The Supabase key
+     in it is the *publishable* one; it ships inside every build anyway and RLS
+     is what guards the tables (`docs/LEADERBOARD_SUPABASE.md`).
+   - `ANDROID_SIGNING_KEYSTORE` — `base64 -w0 ~/.android/debug.keystore` from
+     the machine that built the APKs already on people's phones. A different key
+     means Android refuses the update and players must uninstall, losing points.
+2. **Pages → Build and deployment → Source: GitHub Actions.**
+3. **Actions → Ship → Run workflow** (or push to `Main`).
+
+Without the secrets the workflow still tests everything and says, as a notice,
+that it skipped publishing — so a mirror of the repo stays green.
+
+**Preview locally before pushing.** The script is the same one CI runs:
+
+```bash
+FLUTTER=flutter BUILD_NUMBER=2 bash deploy/build-pages.sh _site/elevar-game \
+  https://rudranaresh0201.github.io/elevar-game/
+cd _site && python -m http.server 8099
+# http://localhost:8099/elevar-game/?device=ios   (?device=android|desktop)
+# http://localhost:8099/elevar-game/play/?a2hs=1  (force the iPhone install sheet)
+```
+
+**What makes the iPhone version feel like an app** (all in `app/web/`):
+
+- Flutter renders into `#app`, inset by `env(safe-area-inset-*)`. Flutter's web
+  engine reports zero MediaQuery padding on iOS, so without this the HUD sits
+  under the Dynamic Island and controls under the home indicator once it is on
+  the home screen.
+- An "Add to Home Screen" sheet, shown only in iOS browsers, not once installed,
+  at most every three days; it tells in-app browsers (Instagram etc.) to open
+  in Safari first, since they have no such option.
+- No long-press callout, text loupe or tap flash.
+- No service worker: Flutter's is deprecated, and it is what pins a home-screen
+  app to an old build.
+
+Icons come from `tools/make_icons.py` (web, iPhone, Android adaptive). Landing
+page frames come from `app/test/screenshots_test.dart` with `ELEVAR_SHOTS` set.
 
 ---
 

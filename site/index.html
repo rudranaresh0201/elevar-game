@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Elevar Play</title>
+  <meta name="description" content="Six arcade games from Elevar Sports. Play free on iPhone or Android, earn points, spend them on kicks.">
+  <meta name="theme-color" content="#12161C">
+  <meta name="color-scheme" content="dark">
+
+  <!-- The link preview is the first thing anyone sees — it arrives in
+       WhatsApp before the page does. __SITE_URL__ is filled in by the deploy
+       workflow, because crawlers only follow absolute image URLs. -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Elevar Play — six games, one tap">
+  <meta property="og:description" content="Cricket, football, archery, racing, ping pong and fruit drop. Free on iPhone and Android.">
+  <meta property="og:url" content="__SITE_URL__">
+  <meta property="og:image" content="__SITE_URL__og.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="icon" type="image/png" href="play/favicon.png">
+  <link rel="apple-touch-icon" href="play/icons/Icon-180.png">
+
+  <style>
+    /* The fonts ship inside the game build next door; no second copy. */
+    @font-face {
+      font-family: "Baloo 2";
+      src: url("play/assets/packages/design_system/assets/fonts/Baloo2-ExtraBold.ttf") format("truetype");
+      font-weight: 800;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: "Fredoka";
+      src: url("play/assets/packages/design_system/assets/fonts/Fredoka-SemiBold.ttf") format("truetype");
+      font-weight: 600;
+      font-display: swap;
+    }
+
+    :root {
+      --ink: #000;
+      --surface: #12161C;
+      --raised: #1C2028;
+      --muted: #8A94A6;
+      --red: #FF2B2B;
+      --blue: #007AF5;
+      --yellow: #FFF200;
+      --green: #27D6A2;
+      --display: "Baloo 2", system-ui, -apple-system, "Segoe UI", sans-serif;
+      --body: "Fredoka", system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { -webkit-text-size-adjust: 100%; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--surface);
+      color: #fff;
+      font: 600 16px/1.4 var(--body);
+      -webkit-tap-highlight-color: transparent;
+      overflow-x: hidden;
+    }
+
+    /* The two corner wedges from the ping pong court. */
+    body::before, body::after {
+      content: "";
+      position: fixed;
+      z-index: -1;
+      pointer-events: none;
+    }
+    body::before {
+      left: 0; bottom: 0;
+      width: 70vw; height: 42vh;
+      background: #FF1024;
+      clip-path: polygon(0 100%, 0 35%, 100% 100%);
+      opacity: .9;
+    }
+    body::after {
+      right: 0; top: 0;
+      width: 60vw; height: 30vh;
+      background: #3F5BFF;
+      clip-path: polygon(100% 0, 100% 100%, 0 0);
+      opacity: .9;
+    }
+
+    .wrap {
+      width: min(100%, 1080px);
+      margin: 0 auto;
+      padding-inline: max(20px, env(safe-area-inset-left));
+      padding-block: max(28px, env(safe-area-inset-top)) max(28px, env(safe-area-inset-bottom));
+    }
+
+    header { display: flex; align-items: center; gap: 12px; }
+    header img {
+      width: 44px; height: 44px;
+      border: 3px solid var(--ink);
+      border-radius: 12px;
+      box-shadow: 0 3px 0 var(--ink);
+    }
+    header span { font: 800 20px/1 var(--display); letter-spacing: .04em; }
+
+    .hero {
+      display: grid;
+      /* minmax(0, …): without it the track grows to the phones' width and the
+         whole column spills off a 390pt screen. */
+      grid-template-columns: minmax(0, 1fr);
+      gap: 32px;
+      align-items: center;
+      padding-block: 36px 12px;
+    }
+    @media (min-width: 860px) {
+      .hero { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding-block: 64px 24px; }
+    }
+
+    h1 {
+      margin: 0;
+      font: 800 clamp(64px, 17vw, 120px)/.86 var(--display);
+      letter-spacing: .01em;
+      -webkit-text-stroke: 5px var(--ink);
+      paint-order: stroke fill;
+      text-shadow: 0 6px 0 var(--ink);
+    }
+    h1 em { font-style: normal; color: var(--yellow); display: block; }
+
+    .tagline {
+      margin: 18px 0 26px;
+      max-width: 30ch;
+      font-size: clamp(18px, 4.6vw, 22px);
+      color: #fff;
+    }
+    .tagline b { color: var(--yellow); font-weight: 600; }
+
+    .cta { display: grid; gap: 12px; max-width: 380px; }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      min-height: 64px;
+      padding: 10px 22px;
+      border: 3px solid var(--ink);
+      border-radius: 18px;
+      box-shadow: 0 5px 0 var(--ink);
+      color: #fff;
+      text-decoration: none;
+      font: 800 22px/1 var(--display);
+      letter-spacing: .05em;
+      transition: transform .08s ease, box-shadow .08s ease;
+    }
+    .btn:active { transform: translateY(4px); box-shadow: 0 1px 0 var(--ink); }
+    .btn small {
+      display: block;
+      margin-top: 3px;
+      font: 600 13px/1.1 var(--body);
+      letter-spacing: 0;
+      opacity: .85;
+    }
+    .btn svg { flex: none; }
+    .btn-play { background: var(--red); }
+    .btn-android { background: var(--green); color: #06251B; }
+    .btn-ghost {
+      min-height: 52px;
+      background: var(--raised);
+      font-size: 18px;
+    }
+
+    .note {
+      margin: 4px 2px 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+    .note b { color: #fff; font-weight: 600; }
+
+    /* The fan of phones. */
+    .phones {
+      position: relative;
+      height: clamp(380px, 110vw, 560px);
+      max-width: 520px;
+      width: 100%;
+      margin-inline: auto;
+    }
+    .phone {
+      position: absolute;
+      top: 50%; left: 50%;
+      width: 44%;
+      aspect-ratio: 390 / 844;
+      max-width: 100%;
+      border: 6px solid var(--ink);
+      border-radius: 28px;
+      overflow: hidden;
+      background: var(--ink);
+      box-shadow: 0 14px 0 rgba(0,0,0,.45);
+      animation: bob 5s ease-in-out infinite;
+    }
+    .phone img { display: block; width: 100%; height: 100%; object-fit: cover; }
+    .phone:nth-child(1) { --r: -12deg; --x: -104%; --y: -46%; animation-delay: -1s; }
+    .phone:nth-child(2) { --r: 9deg;   --x: 4%;    --y: -54%; animation-delay: -3s; }
+    .phone:nth-child(3) { --r: -3deg;  --x: -50%;  --y: -50%; z-index: 2; width: 50%; animation-delay: -2s; }
+    .phone { transform: translate(var(--x), var(--y)) rotate(var(--r)); }
+    @keyframes bob {
+      0%, 100% { transform: translate(var(--x), var(--y)) rotate(var(--r)); }
+      50%      { transform: translate(var(--x), calc(var(--y) - 3%)) rotate(var(--r)); }
+    }
+    @media (prefers-reduced-motion: reduce) { .phone { animation: none; } }
+
+    h2 {
+      margin: 48px 0 16px;
+      font: 800 clamp(30px, 8vw, 44px)/1 var(--display);
+      -webkit-text-stroke: 3px var(--ink);
+      paint-order: stroke fill;
+    }
+
+    /* Games: a swipeable row on a phone, a grid on a laptop. */
+    .games {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(200px, 62%);
+      gap: 14px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      padding: 4px 20px 18px;
+      margin-inline: -20px;
+      scrollbar-width: none;
+    }
+    .games::-webkit-scrollbar { display: none; }
+    @media (min-width: 860px) {
+      .games {
+        grid-auto-flow: row;
+        grid-template-columns: repeat(3, 1fr);
+        overflow: visible;
+        margin-inline: 0;
+        padding-inline: 0;
+      }
+    }
+    .game {
+      scroll-snap-align: center;
+      border: 3px solid var(--ink);
+      border-radius: 22px;
+      background: var(--raised);
+      box-shadow: 0 5px 0 var(--ink);
+      overflow: hidden;
+    }
+    .game .shot {
+      height: 230px;
+      background-size: cover;
+      background-position: center 62%;
+      border-bottom: 3px solid var(--ink);
+    }
+    .game div.meta { padding: 12px 14px 14px; }
+    .game h3 { margin: 0; font: 800 24px/1 var(--display); }
+    .game p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+
+    .steps {
+      display: grid;
+      gap: 12px;
+      counter-reset: step;
+    }
+    @media (min-width: 860px) { .steps { grid-template-columns: repeat(3, 1fr); } }
+    .step {
+      display: flex;
+      gap: 14px;
+      align-items: center;
+      padding: 16px;
+      border: 3px solid var(--ink);
+      border-radius: 18px;
+      background: var(--raised);
+    }
+    .step::before {
+      counter-increment: step;
+      content: counter(step);
+      flex: none;
+      width: 44px; height: 44px;
+      display: grid; place-items: center;
+      border: 3px solid var(--ink);
+      border-radius: 50%;
+      background: var(--yellow);
+      color: #000;
+      font: 800 24px/1 var(--display);
+    }
+    .step b { display: block; font: 800 20px/1.1 var(--display); }
+    .step span { color: var(--muted); font-size: 14px; }
+
+    .install {
+      margin-top: 12px;
+      padding: 18px;
+      border: 3px solid var(--ink);
+      border-radius: 18px;
+      background: var(--raised);
+    }
+    .install h3 { margin: 0 0 8px; font: 800 22px/1.1 var(--display); }
+    .install ol { margin: 0; padding-left: 22px; color: #D5D8DC; }
+    .install li { margin: 4px 0; }
+    .install b { color: #fff; font-weight: 600; }
+
+    footer {
+      margin-top: 48px;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
+
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <img src="icon.png" alt="">
+      <span>ELEVAR SPORTS</span>
+    </header>
+
+    <section class="hero">
+      <div>
+        <h1>ELEVAR<em>PLAY</em></h1>
+        <p class="tagline">Six arcade games. Beat the bot, climb the board, <b>earn points for kicks.</b></p>
+
+        <!-- Every button is here; the script shows the ones that make sense
+             for the phone in hand. With no script, all of them show. -->
+        <div class="cta">
+          <a class="btn btn-play" href="play/" data-for="ios desktop other">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5Z"/></svg>
+            <span>PLAY NOW<small data-ios-only hidden>Right in Safari · no App Store</small></span>
+          </a>
+
+          <a class="btn btn-android" href="elevar-play.apk" download data-for="android desktop other">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+            <span>GET THE ANDROID APP<small>__APK_SIZE__ · free</small></span>
+          </a>
+
+          <a class="btn btn-ghost" href="play/" data-for="android">Or play in your browser</a>
+
+          <p class="note" data-for="ios">Once it opens, tap <b>Share → Add to Home Screen</b> and it becomes an app.</p>
+          <p class="note" data-for="desktop">Best on a phone — send this link to yours.</p>
+        </div>
+      </div>
+
+      <div class="phones" aria-hidden="true">
+        <div class="phone"><img src="shots/archery.png" alt="" loading="eager"></div>
+        <div class="phone"><img src="shots/fruitdrop.png" alt="" loading="eager"></div>
+        <div class="phone"><img src="shots/cricket.png" alt="" loading="eager"></div>
+      </div>
+    </section>
+
+    <h2>The games</h2>
+    <div class="games">
+      <article class="game">
+        <div class="shot" role="img" aria-label="Wall cricket" style="background-image:url(shots/cricket.png)"></div>
+        <div class="meta"><h3>Cricket</h3><p>Time the swing, pick the gap, chase the total.</p></div>
+      </article>
+      <article class="game">
+        <div class="shot" role="img" aria-label="Penalty shootout" style="background-image:url(shots/football.png)"></div>
+        <div class="meta"><h3>Football</h3><p>Swipe to shoot. Then dive to save.</p></div>
+      </article>
+      <article class="game">
+        <div class="shot" role="img" aria-label="Archery duel" style="background-image:url(shots/archery.png)"></div>
+        <div class="meta"><h3>Archery</h3><p>Pull back, read the wind, hit the head.</p></div>
+      </article>
+      <article class="game">
+        <div class="shot" role="img" aria-label="Fruit drop" style="background-image:url(shots/fruitdrop.png)"></div>
+        <div class="meta"><h3>Fruit Drop</h3><p>Merge up to the giant plum. Earn your stars.</p></div>
+      </article>
+      <article class="game">
+        <div class="shot" role="img" aria-label="Racing" style="background-image:url(shots/racing.png);background-position:center 45%"></div>
+        <div class="meta"><h3>Racing</h3><p>Dirt track, tight turns, beat the bot to the line.</p></div>
+      </article>
+      <article class="game">
+        <div class="shot" role="img" aria-label="Ping pong" style="background-image:url(shots/pingpong.png);background-position:center 40%"></div>
+        <div class="meta"><h3>Ping Pong</h3><p>One phone, two thumbs. Or take on the bot.</p></div>
+      </article>
+    </div>
+
+    <h2>How it works</h2>
+    <div class="steps">
+      <div class="step"><div><b>Play</b><span>Quick rounds. No sign-up.</span></div></div>
+      <div class="step"><div><b>Earn points</b><span>Win, streak, top the leaderboard.</span></div></div>
+      <div class="step"><div><b>Spend them</b><span>On Elevar kicks and gear.</span></div></div>
+    </div>
+
+    <div class="install" data-for="android">
+      <h3>Installing on Android</h3>
+      <ol>
+        <li>Tap <b>Get the Android app</b> and open the file when it finishes.</li>
+        <li>If Android asks, allow your browser to <b>install unknown apps</b>.</li>
+        <li>Tap <b>Install</b>. Already have it? This updates it — your points stay.</li>
+      </ol>
+    </div>
+
+    <div class="install" data-for="ios">
+      <h3>Make it an app on iPhone</h3>
+      <ol>
+        <li>Tap <b>Play now</b> — it opens in Safari.</li>
+        <li>Tap <b>Share</b> (or <b>•••</b> then Share).</li>
+        <li>Tap <b>Add to Home Screen</b>. It opens full screen, like any app.</li>
+      </ol>
+    </div>
+
+    <footer>Elevar Sports · build __BUILD__</footer>
+  </div>
+
+  <script>
+    (function () {
+      var ua = navigator.userAgent;
+      var forced = (location.search.match(/[?&]device=(\w+)/) || [])[1];
+      var device = forced ||
+        (/iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) ? 'ios'
+          : /Android/.test(ua) ? 'android'
+          : /Mobi/.test(ua) ? 'other'
+          : 'desktop');
+      document.querySelectorAll('[data-for]').forEach(function (el) {
+        el.hidden = el.getAttribute('data-for').split(' ').indexOf(device) < 0;
+      });
+      if (device === 'ios') {
+        document.querySelectorAll('[data-ios-only]').forEach(function (el) { el.hidden = false; });
+      }
+    })();
+  </script>
+</body>
+</html>

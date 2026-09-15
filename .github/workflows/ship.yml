@@ -1,0 +1,154 @@
+# Every push to Main: test, build the web app and the APK, publish both.
+#
+#   https://<owner>.github.io/elevar-game/          landing page, one link for any phone
+#   https://<owner>.github.io/elevar-game/play/     the game in a browser (iPhone)
+#   https://<owner>.github.io/elevar-game/elevar-play.apk
+#
+# Tests run everywhere. Building and publishing only happens on a repo that has
+# the two secrets below and GitHub Pages switched on — on a fork or a mirror
+# the ship job says so and stops, rather than failing red. Setup: docs/DEPLOY.md.
+#
+#   ELEVAR_ENV_JSON          contents of app/elevar.env.json (Supabase URL and
+#                            publishable key — public by design, RLS guards it)
+#   ANDROID_SIGNING_KEYSTORE base64 of the keystore every earlier APK was signed
+#                            with, so new builds install as an update
+
+name: Ship
+
+on:
+  push:
+    branches: [Main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ship-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: 3.47.1
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      # The points ledger tests run real SQLite through sqflite_common_ffi.
+      - run: sudo apt-get install -y --no-install-recommends libsqlite3-dev
+
+      - name: Simulations (pure Dart)
+        run: |
+          for p in game_core pingpong_sim racing_sim cricket_sim soccer_sim wallcricket_sim penalty_sim archery_sim fruitdrop_sim; do
+            echo "::group::$p"
+            (cd "packages/$p" && dart test)
+            echo "::endgroup::"
+          done
+
+      - name: Widgets and app
+        run: |
+          # golden_test.dart files compare against PNGs rendered on Windows;
+          # font rasterisation differs on Linux, so they only run locally.
+          for p in packages/game_pingpong packages/game_racing packages/game_cricket packages/game_soccer app; do
+            echo "::group::$p"
+            (cd "$p" && flutter test $(ls test/*_test.dart | grep -v golden_test.dart))
+            echo "::endgroup::"
+          done
+
+  ship:
+    needs: test
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      pages: write
+    outputs:
+      ready: ${{ steps.gate.outputs.ready }}
+    steps:
+      - name: Check this repo is set up to publish
+        id: gate
+        env:
+          ENV_JSON: ${{ secrets.ELEVAR_ENV_JSON }}
+          KEYSTORE: ${{ secrets.ANDROID_SIGNING_KEYSTORE }}
+        run: |
+          if [ -n "$ENV_JSON" ] && [ -n "$KEYSTORE" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Not publishing: add ELEVAR_ENV_JSON and ANDROID_SIGNING_KEYSTORE secrets (docs/DEPLOY.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.gate.outputs.ready == 'true'
+        uses: actions/checkout@v5
+
+      - if: steps.gate.outputs.ready == 'true'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - if: steps.gate.outputs.ready == 'true'
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Install secrets
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          ENV_JSON: ${{ secrets.ELEVAR_ENV_JSON }}
+          KEYSTORE: ${{ secrets.ANDROID_SIGNING_KEYSTORE }}
+        run: |
+          printf '%s' "$ENV_JSON" > app/elevar.env.json
+          # The release build is signed with the debug config (see
+          # app/android/app/build.gradle.kts), and Gradle reads that key from
+          # here. Same key as every APK already on a phone → installs as an
+          # update, points kept.
+          mkdir -p ~/.android
+          printf '%s' "$KEYSTORE" | base64 -d > ~/.android/debug.keystore
+
+      - name: Configure Pages
+        if: steps.gate.outputs.ready == 'true'
+        id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Build site
+        if: steps.gate.outputs.ready == 'true'
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+          SITE_URL: ${{ steps.pages.outputs.base_url }}
+        run: |
+          # Android refuses an update whose versionCode is not at least the
+          # installed one. Hand-built APKs so far were 1 and 2; start above.
+          export BUILD_NUMBER=$((100 + RUN_NUMBER))
+          bash deploy/build-pages.sh _site "$SITE_URL/"
+
+      - if: steps.gate.outputs.ready == 'true'
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    needs: ship
+    if: needs.ship.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -12,8 +12,11 @@ import 'package:game_archery/game_archery.dart';
 import 'package:game_core/game_core.dart';
 import 'package:game_fruitdrop/game_fruitdrop.dart';
 import 'package:game_penalty/game_penalty.dart';
+import 'package:game_pingpong/game_pingpong.dart';
+import 'package:game_racing/game_racing.dart';
 import 'package:game_wallcricket/game_wallcricket.dart';
 import 'package:penalty_sim/penalty_sim.dart';
+import 'package:pingpong_sim/pingpong_sim.dart' show PongRules;
 import 'package:wallcricket_sim/wallcricket_sim.dart';
 
 /// Renders frames of each game to PNG for a human to look at. Not a golden
@@ -29,6 +32,14 @@ Future<void> loadFonts() async {
     final bytes = File('../packages/design_system/assets/fonts/$file').readAsBytesSync();
     final loader = FontLoader(family)..addFont(Future.value(ByteData.view(bytes.buffer)));
     await loader.load();
+  }
+  // Without this every Icon renders as an empty box — fine for checking a
+  // layout, not for the frames that end up on the landing page.
+  final flutterRoot = Platform.environment['FLUTTER_ROOT'];
+  final icons = File('$flutterRoot/bin/cache/artifacts/material_fonts/materialicons-regular.otf');
+  if (flutterRoot != null && icons.existsSync()) {
+    final bytes = icons.readAsBytesSync();
+    await (FontLoader('MaterialIcons')..addFont(Future.value(ByteData.view(bytes.buffer)))).load();
   }
 }
 
@@ -173,5 +184,56 @@ void main() {
     }
     await frames(tester, 60);
     await shoot(tester, 'fruit_3_pile');
+  });
+
+  testWidgets('racing', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpWidget(MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(body: RaceView(
+        config: const RaceConfig(
+          mode: GameMode.vsBot,
+          botDifficulty: BotDifficulty.medium,
+          trackName: 'DUSTBOWL',
+          seed: 4242,
+        ),
+        onQuit: () {},
+        onComplete: (_) {},
+      )),
+    ));
+    await tester.pump();
+    final gas = await tester.startGesture(tester.getCenter(find.text('GAS')));
+    await frames(tester, 460);
+    await shoot(tester, 'racing_1_running');
+    await gas.up();
+  });
+
+  testWidgets('ping pong', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpWidget(MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Scaffold(body: PongView(
+        config: const PongConfig(
+          mode: GameMode.vsBot,
+          botDifficulty: BotDifficulty.medium,
+          seed: 31415,
+          rules: PongRules.standard,
+        ),
+        onQuit: () {},
+        onComplete: (_) {},
+      )),
+    ));
+    await tester.pump();
+    final thumb = await tester.startGesture(const Offset(195, 700));
+    for (var frame = 0; frame < 150; frame++) {
+      await thumb.moveTo(Offset(120 + 150 * ((frame % 50) / 50), 700));
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    await shoot(tester, 'pingpong_1_rally');
+    await thumb.up();
   });
 }
